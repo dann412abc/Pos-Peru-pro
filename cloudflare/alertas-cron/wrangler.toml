@@ -1,0 +1,10 @@
+name = "mi-carrito-pos-alertas-cron"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Configurar como secrets/variables desde Wrangler:
+# POS_API_ORIGIN = https://api.tudominio.pe
+# CRON_SECRET = secreto aleatorio de al menos 32 caracteres

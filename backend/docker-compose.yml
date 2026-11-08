@@ -1,0 +1,76 @@
+# ============================================================
+# Mi Carrito POS - docker-compose.yml
+# Servicios: postgres 15, redis 7, backend (NestJS)
+# Healthchecks y volumenes persistentes incluidos.
+# Uso: docker compose up -d
+# ============================================================
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: mi-carrito-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: micarrito
+      POSTGRES_PASSWORD: micarrito_secret
+      POSTGRES_DB: mi_carrito_pos
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U micarrito -d mi_carrito_pos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mi-carrito-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    container_name: mi-carrito-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: micarrito
+      DB_PASSWORD: micarrito_secret
+      DB_DATABASE: mi_carrito_pos
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Define JWT_ACCESS_SECRET en .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Define JWT_REFRESH_SECRET en .env}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      OSE_PROVIDER: mock
+      OSE_MOCK: "true"
+      OSE_ENDPOINT: https://api.nubefact.com/api/v1/sandbox
+    ports:
+      - "3000:3000"
+    volumes:
+      - fedata:/app/storage/fe
+
+volumes:
+  pgdata:
+  redisdata:
+  fedata:

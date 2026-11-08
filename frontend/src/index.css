@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos base de Mi Carrito POS */
+:root {
+  --primario: #1b4b6f;
+  --ambar: #d97706;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #f4f6f8;
+  color: #1f2937;
+  font-family: Inter, system-ui, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar discreto */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c3cfd9;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@layer components {
+  .btn-primario {
+    @apply bg-primario-600 hover:bg-primario-700 text-white font-semibold rounded-lg px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-ambar {
+    @apply bg-ambar-500 hover:bg-ambar-600 text-white font-semibold rounded-lg px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secundario {
+    @apply bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium rounded-lg px-4 py-2 transition-colors;
+  }
+  .input {
+    @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primario-500 focus:border-primario-500;
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-card border border-gray-100;
+  }
+  .label {
+    @apply block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+}
+
+/* ============================================================
+   Estilos de impresión de ticket en 3 formatos: 58mm, 80mm, A5
+   ============================================================ */
+
+/* Páginas nombradas: el contenedor del ticket usa `page: <formato>`
+   para que el navegador aplique el tamaño de página correcto al imprimir. */
+@page ticket-58 {
+  size: 58mm auto;
+  margin: 0;
+}
+@page ticket-80 {
+  size: 80mm auto;
+  margin: 0;
+}
+@page ticket-a5 {
+  size: A5;
+  margin: 10mm;
+}
+
+/* Tamaños de QR por formato (en pantalla e impresión) */
+.qr-ticket {
+  width: 128px;
+  height: 128px;
+}
+.qr-58 {
+  width: 96px;
+  height: 96px;
+}
+.qr-80 {
+  width: 120px;
+  height: 120px;
+}
+.qr-a5 {
+  width: 160px;
+  height: 160px;
+}
+
+/* Vista previa en pantalla según formato */
+.ticket-58 {
+  max-width: 62mm;
+  margin: 0 auto;
+  font-size: 10px;
+}
+.ticket-80 {
+  max-width: 82mm;
+  margin: 0 auto;
+  font-size: 11px;
+}
+.ticket-a5 {
+  max-width: 148mm;
+  margin: 0 auto;
+  font-size: 13px;
+}
+
+@media print {
+  /* Ocultar botones, selectores y todo lo marcado como no imprimible */
+  .no-print {
+    display: none !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+  #ticket-imprimible,
+  #ticket-imprimible * {
+    visibility: visible;
+  }
+
+  #ticket-imprimible {
+    position: absolute;
+    left: 0;
+    top: 0;
+    padding: 2mm;
+    margin: 0;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Ancho y tipografía por formato al imprimir */
+  #ticket-imprimible.ticket-58 {
+    page: ticket-58;
+    width: 58mm;
+    font-size: 10px;
+  }
+  #ticket-imprimible.ticket-80 {
+    page: ticket-80;
+    width: 80mm;
+    font-size: 11px;
+  }
+  #ticket-imprimible.ticket-a5 {
+    page: ticket-a5;
+    width: auto;
+    font-size: 13px;
+  }
+
+  /* Líneas de producto más compactas en térmica */
+  #ticket-imprimible.ticket-58 table,
+  #ticket-imprimible.ticket-80 table {
+    font-size: 0.95em;
+  }
+}

@@ -1,0 +1,76 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks: [internal]
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment: &backend-env
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: ${DB_HOST:?Set Supabase DB_HOST in .env}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USERNAME: ${DB_USERNAME:?Set Supabase DB_USERNAME in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?Set Supabase DB_PASSWORD in .env}
+      DB_DATABASE: ${DB_DATABASE:?Set Supabase DB_DATABASE in .env}
+      DB_SSL: ${DB_SSL:-true}
+      DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-true}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env}
+      CORS_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN in .env}
+      OSE_PROVIDER: ${OSE_PROVIDER:-mock}
+      OSE_MOCK: ${OSE_MOCK:-true}
+      OSE_ENDPOINT: ${OSE_ENDPOINT:-https://api.nubefact.com/api/v1/sandbox}
+    depends_on:
+      redis: { condition: service_healthy }
+    volumes:
+      - fedata:/app/storage/fe
+    expose: ["3000"]
+    networks: [internal]
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on: [backend]
+    expose: ["80"]
+    networks: [internal]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Set TUNNEL_TOKEN in .env}
+    depends_on: [frontend]
+    networks: [internal]
+
+  migrate:
+    build:
+      context: ./backend
+      target: builder
+    profiles: [ops]
+    environment: *backend-env
+    command: ["npm", "run", "migration:run"]
+    depends_on:
+      redis: { condition: service_healthy }
+    networks: [internal]
+
+volumes:
+  redisdata:
+  fedata:
+
+networks:
+  internal:
+    driver: bridge

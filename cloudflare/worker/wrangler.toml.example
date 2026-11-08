@@ -1,0 +1,20 @@
+name = "mi-carrito-pos-jobs"
+main = "index.js"
+compatibility_date = "2026-11-07"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Crear la cola y enlazarla antes de desplegar:
+# [[queues.consumers]]
+# queue = "mi-carrito-pos-jobs"
+# max_batch_size = 10
+# max_retries = 5
+# dead_letter_queue = "mi-carrito-pos-jobs-dlq"
+
+# Configurar como secrets, nunca aquí:
+# SUPABASE_URL
+# SUPABASE_SERVICE_ROLE_KEY
+# PRIVILEGED_RPC_ALLOWLIST
+# CRON_RPC_ALLOWLIST
+# QUEUE_RPC_ALLOWLIST

@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+const root = path.resolve(process.cwd());
+const edge = fs.readFileSync(path.join(root, 'frontend/functions/api/edge/[[path]].js'), 'utf8');
+const api = fs.readFileSync(path.join(root, 'frontend/src/api/supabasePurchases.ts'), 'utf8');
+const ui = fs.readFileSync(path.join(root, 'frontend/src/pages/Compras.tsx'), 'utf8');
+const sql = fs.readFileSync(path.join(root, 'supabase/migrations-preview/202611070017_purchase_replenishment_read_rpc.sql'), 'utf8');
+test('route requires authenticated bearer token', () => { assert.match(edge, /purchases\/replenishment[\s\S]*?getBearer\(request\)/); });
+test('route validates branch id and calls scoped RPC', () => { assert.match(edge, /INVALID_REPLENISHMENT_QUERY/); assert.match(edge, /pos_compras_sugerencias_reposicion_auth/); });
+test('client validates response shape', () => { assert.match(api, /fetchSupabasePurchaseReplenishment/); assert.match(api, /Array\.isArray\(response\.data\?\.sugerencias\)/); });
+test('purchases screen uses Supabase route in Supabase mode', () => { assert.match(ui, /fetchSupabasePurchaseReplenishment\(sucursalId\)/); });
+test('SQL enforces user, company and authorized branch', () => { assert.match(sql, /auth\.uid\(\)/); assert.match(sql, /usuario_sucursal/); assert.match(sql, /s\.empresa_id=v_empresa/); });
+test('SQL includes both simple products and variants', () => { assert.match(sql, /producto_stock/); assert.match(sql, /producto_variante_stock/); });
+test('SQL is read-only and does not create orders', () => { assert.doesNotMatch(sql, /INSERT INTO public\.(orden_compra|compra|producto_stock)/i); assert.doesNotMatch(sql, /UPDATE public\.(producto_stock|producto_variante_stock)/i); });

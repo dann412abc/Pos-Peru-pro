@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const root=new URL('../../',import.meta.url);
+const sql=readFileSync(new URL('supabase/migrations-preview/202611070014_purchase_orders_rpc.sql',root),'utf8');
+const edge=readFileSync(new URL('frontend/functions/api/edge/[[path]].js',root),'utf8');
+const ui=readFileSync(new URL('frontend/src/pages/Compras.tsx',root),'utf8');
+test('orders RPC is scoped to auth uid and assigned branch',()=>{assert.match(sql,/auth\.uid\(\)/);assert.match(sql,/usuario_sucursal/);assert.match(sql,/empresa_id=v_empresa/)});
+test('order receive composes purchase RPC transactionally',()=>{assert.match(sql,/pos_compra_recibir_auth\(v_compra_payload\)/);assert.match(sql,/orden_compra_recepcion/);assert.match(sql,/cantidad_recibida=cantidad_recibida\+v_qty/)});
+test('order state transitions reject invalid states',()=>{assert.match(sql,/Solo se pueden enviar órdenes en borrador/);assert.match(sql,/No se puede cancelar una orden que ya registra recepción/);assert.match(sql,/RECIBIDA_PARCIAL/)});
+test('edge exposes authenticated order RPC route',()=>{assert.match(edge,/purchases\/orders/);assert.match(edge,/pos_ordenes_compra_auth/);assert.match(edge,/PURCHASE_ORDERS_MIGRATION_REQUIRED/)});
+test('UI uses Supabase order APIs in Supabase mode',()=>{assert.match(ui,/listarOrdenesCompraSupabase/);assert.match(ui,/crearOrdenCompraSupabase/);assert.match(ui,/recepcionarOrdenCompraSupabase/);assert.match(ui,/cambiarEstadoOrdenCompraSupabase/)});
