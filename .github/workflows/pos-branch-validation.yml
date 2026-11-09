@@ -7,6 +7,9 @@ on:
     paths:
       - "frontend/**"
       - "supabase/migrations-preview/**"
+      - "supabase/tests/**"
+      - "docs/**"
+      - "backend/package.json"
       - ".github/workflows/pos-branch-validation.yml"
   workflow_dispatch:
 
