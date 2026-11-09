@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { post } = vi.hoisted(() => ({ post: vi.fn() }));
-vi.mock('axios', () => ({ default: { post } }));
+vi.mock('axios', () => ({ default: { post, isAxiosError: (error: any) => Boolean(error?.isAxiosError) } }));
 vi.mock('./client', () => ({ getAccessToken: () => 'valid-supabase-jwt' }));
 
 import { crearVentaSupabase, consultarEstadoVentaSupabase, obtenerClaveVentaSupabase, limpiarClaveVentaSupabase, guardarIntentoVentaPendienteSupabase, obtenerIntentoVentaPendienteSupabase, consultarDetalleComprobanteSupabase } from './supabaseSales';
