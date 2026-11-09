@@ -60,6 +60,34 @@ test('sale UI submits the exact selected variant and quantity to the FEFO sale p
   assert.match(salesApi, /trazabilidadFEFO !== true/);
 });
 
+test('sale FEFO replay and recovery use the exact writer fingerprint', () => {
+  const fingerprint = /encode\(sha256\(convert_to\(\((?:p_venta|p_payload) - 'idempotencyKey'\)::text,'UTF8'\)\),'hex'\)/g;
+  assert.equal((saleSql.match(fingerprint) || []).length, 2);
+  assert.doesNotMatch(saleSql, /md5\(p_(?:venta|payload)::text\)/);
+  assert.match(saleSql, /SALE_IDEMPOTENCY_CONFLICT/);
+  assert.match(saleSql, /request_hash IS DISTINCT FROM v_hash/);
+});
+
+test('sales mixed payments require unique methods and exact server-side total', () => {
+  const validator = read('../migrations-preview/202611070028_sales_payment_validation.sql');
+  const writer = read('../migrations-preview/202611070033_sales_document_payment_writer_internal.sql');
+  assert.match(validator, /v_count < 1 OR v_count > 5/);
+  assert.match(validator, /SALE_PAYMENT_METHOD_DUPLICATED/);
+  assert.match(validator, /IF v_suma <> v_total/);
+  assert.match(validator, /SALE_CREDIT_LIMIT_EXCEEDED/);
+  assert.match(writer, /INSERT INTO public\.comprobante_pago/);
+  assert.match(writer, /v_payment_count <> jsonb_array_length/);
+});
+
+test('purchase weighted average safely handles legacy null cost and computes both base and variant costs', () => {
+  assert.match(purchaseSql, /avg_after:=round\(\(\(stock_before\*COALESCE\(avg_before,0\)\)\+\(qty\*unit_cost\)\)\/\(stock_before\+qty\),4\)/);
+  assert.match(purchaseSql, /UPDATE public\.producto_stock SET stock=stock_after,costo_promedio=avg_after/);
+  assert.match(purchaseSql, /UPDATE public\.producto_variante_stock SET stock=stock_after,costo_promedio=avg_after/);
+  const weighted = (stock, average, incoming, cost) => Number((((stock * (average ?? 0)) + incoming * cost) / (stock + incoming)).toFixed(4));
+  assert.equal(weighted(10, 5, 5, 8), 6);
+  assert.equal(weighted(0, null, 5, 8), 8);
+});
+
 test('FEFO fixture consumes only the selected variant lots in earliest-expiry order', () => {
   const today = '2026-11-09';
   const lots = [
