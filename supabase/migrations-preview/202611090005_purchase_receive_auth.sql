@@ -18,7 +18,7 @@ DECLARE
  uid uuid:=auth.uid(); user_id integer; company_id integer; role_name text;
  branch_id integer; supplier_id integer; doc_type text; doc_series text; doc_number text;
  doc_date date; due_date date; pay_condition text; idem_key text; payload_hash text;
- old_purchase record; line jsonb; payment jsonb; product_row record; variant_row record;
+ old_purchase record; line jsonb; payment jsonb; product_row record; variant_row record; variant_name text; variant_code text;
  product_id integer; variant_id bigint; line_key text; line_keys text[]:=ARRAY[]::text[];
  packs numeric; units_per_pack numeric; pack_cost numeric; qty numeric(12,3); unit_cost numeric(12,4);
  amount numeric(14,2); base_amount numeric(14,2); tax_amount numeric(14,2); line_total numeric(14,2);
@@ -105,9 +105,9 @@ BEGIN
  END IF;
 
  -- First pass validates catalog, variant, stock row and IGV; computes tax totals.
- FOR line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') LOOP
+ FOR line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') ORDER BY (value->>'productoId')::integer, NULLIF(value->>'varianteId','')::bigint NULLS FIRST LOOP
   product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::bigint;
-  packs:=(line->>'cantidad')::numeric; units_per_pack:=COALESCE(NULLIF(line->>'unidadesPorEmpaque','')::numeric,1);
+  packs:(line->>'cantidad')::numeric; units_per_pack:=COALESCE(NULLIF(line->>'unidadesPorEmpaque','')::numeric,1);
   pack_cost:=COALESCE(NULLIF(line->>'costoEmpaque','')::numeric,(line->>'costoUnitario')::numeric*units_per_pack);
   IF packs<=0 OR packs>999999 OR units_per_pack<=0 OR units_per_pack>999999 OR pack_cost<=0 OR pack_cost>99999999 THEN
    RAISE EXCEPTION 'PURCHASE_PACK_INVALID' USING ERRCODE='22023';
@@ -175,10 +175,11 @@ BEGIN
   SELECT p.nombre,p.tipo_igv INTO product_row FROM public.producto p WHERE p.id=product_id AND p.empresa_id=company_id;
   IF variant_id IS NOT NULL THEN
    SELECT pv.id,pv.nombre,pv.codigo INTO variant_row FROM public.producto_variante pv WHERE pv.id=variant_id AND pv.empresa_id=company_id;
+   variant_name:=variant_row.nombre; variant_code:=variant_row.codigo;
    SELECT vs.stock,vs.costo_promedio INTO stock_before,avg_before FROM public.producto_variante_stock vs
    WHERE vs.variante_id=variant_id AND vs.producto_id=product_id AND vs.empresa_id=company_id AND vs.sucursal_id=branch_id FOR UPDATE;
   ELSE
-   variant_row:=NULL;
+   variant_name:=NULL; variant_code:=NULL;
    SELECT ps.stock,ps.costo_promedio INTO stock_before,avg_before FROM public.producto_stock ps
    WHERE ps.producto_id=product_id AND ps.empresa_id=company_id AND ps.sucursal_id=branch_id FOR UPDATE;
   END IF;
@@ -194,7 +195,7 @@ BEGIN
   INSERT INTO public.compra_linea(compra_id,empresa_id,producto_id,variante_id,variante_nombre,variante_codigo,numero_linea,
    cantidad,costo_unitario,tipo_igv,base_imponible,igv,subtotal,stock_anterior,stock_posterior,costo_promedio_anterior,
    costo_promedio_posterior,unidad_compra,cantidad_empaques,unidades_por_empaque,costo_empaque,codigo_lote,fecha_vencimiento)
-  VALUES(purchase_id,company_id,product_id,variant_id,variant_row.nombre,variant_row.codigo,line_no,qty,unit_cost,
+  VALUES(purchase_id,company_id,product_id,variant_id,variant_name,variant_code,line_no,qty,unit_cost,
    product_row.tipo_igv,base_amount,tax_amount,line_total,stock_before,stock_after,avg_before,avg_after,
    unit_name,packs,units_per_pack,pack_cost,batch_code,expiry_date) RETURNING id INTO purchase_line_id;
   INSERT INTO public.inventario_lote(empresa_id,sucursal_id,producto_id,variante_id,compra_id,compra_linea_id,codigo_lote,
