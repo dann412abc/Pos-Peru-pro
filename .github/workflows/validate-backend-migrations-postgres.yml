@@ -78,7 +78,7 @@ jobs:
           DECLARE
             migration_count integer;
           BEGIN
-            SELECT COUNT(*) INTO migration_count FROM typeorm_migrations;
+            SELECT COUNT(*) INTO migration_count FROM migrations;
             IF migration_count <> 23 THEN
               RAISE EXCEPTION 'Se esperaban 23 migraciones TypeORM; se aplicaron %', migration_count;
             END IF;
