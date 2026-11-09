@@ -136,6 +136,29 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.pos_inventario_lotes_merma_auth(p_sucursal_id integer)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+AS $function$
+DECLARE v_empresa integer := public.mi_empresa_id();
+BEGIN
+  IF auth.uid() IS NULL OR v_empresa IS NULL THEN RAISE EXCEPTION 'INVENTORY_AUTH_REQUIRED'; END IF;
+  IF p_sucursal_id IS NULL OR p_sucursal_id<=0 OR NOT public.mi_puede_ver_sucursal(p_sucursal_id) THEN
+    RAISE EXCEPTION 'INVENTORY_BRANCH_FORBIDDEN';
+  END IF;
+  RETURN coalesce((SELECT jsonb_agg(jsonb_build_object(
+    'id',l.id,'sucursalNombre',s.nombre,'productoNombre',p.nombre,
+    'varianteNombre',pv.nombre,'codigoLote',l.codigo_lote,'fechaVencimiento',l.fecha_vencimiento,
+    'cantidadDisponible',l.cantidad_disponible,'costoUnitario',l.costo_unitario,
+    'productoId',l.producto_id,'varianteId',l.variante_id
+  ) ORDER BY l.fecha_vencimiento ASC NULLS LAST,l.created_at,l.id)
+  FROM public.inventario_lote l
+  JOIN public.producto p ON p.id=l.producto_id AND p.empresa_id=l.empresa_id
+  JOIN public.sucursal s ON s.id=l.sucursal_id AND s.empresa_id=l.empresa_id
+  LEFT JOIN public.producto_variante pv ON pv.id=l.variante_id AND pv.producto_id=l.producto_id
+  WHERE l.empresa_id=v_empresa AND l.sucursal_id=p_sucursal_id AND l.cantidad_disponible>0), '[]'::jsonb);
+END;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.pos_inventario_mermas_listar_auth(p_sucursal_id integer)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
 AS $function$
@@ -158,7 +181,7 @@ END;
 $function$;
 
 REVOKE ALL ON FUNCTION public.pos_inventario_merma_registrar_auth(jsonb) FROM PUBLIC,anon;
-REVOKE ALL ON FUNCTION public.pos_inventario_mermas_listar_auth(integer) FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.pos_inventario_mermas_listar_auth(integer) FROM PUBLIC,anon;\nREVOKE ALL ON FUNCTION public.pos_inventario_lotes_merma_auth(integer) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.pos_inventario_merma_registrar_auth(jsonb) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.pos_inventario_mermas_listar_auth(integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.pos_inventario_mermas_listar_auth(integer) TO authenticated;\nGRANT EXECUTE ON FUNCTION public.pos_inventario_lotes_merma_auth(integer) TO authenticated;
 COMMIT;
