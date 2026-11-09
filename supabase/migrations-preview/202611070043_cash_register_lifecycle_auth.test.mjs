@@ -22,3 +22,10 @@ test('cash close still records the counted cash and per-method reconciliation', 
   assert.match(closeFn, /'montoEsperado'.*'montoContado'.*'diferencia'/);
   assert.match(closeFn, /estado='CERRADA'.*efectivo_contado=p_efectivo_contado/);
 });
+
+test('cash withdrawal availability includes legacy receipts and tenant-scoped movements', () => {
+  assert.match(movementFn, /UNION ALL[\\s\\S]*SELECT co\\.metodo_pago,co\\.total[\\s\\S]*NOT EXISTS/);
+  assert.match(movementFn, /co\\.empresa_id=v_empresa/);
+  assert.match(movementFn, /cm\\.usuario_id=v_usuario/);
+  assert.match(movementFn, /d\\.empresa_id=v_empresa/);
+});
