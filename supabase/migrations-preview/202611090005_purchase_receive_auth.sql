@@ -107,7 +107,7 @@ BEGIN
  -- First pass validates catalog, variant, stock row and IGV; computes tax totals.
  FOR line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') ORDER BY (value->>'productoId')::integer, NULLIF(value->>'varianteId','')::bigint NULLS FIRST LOOP
   product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::bigint;
-  packs:(line->>'cantidad')::numeric; units_per_pack:=COALESCE(NULLIF(line->>'unidadesPorEmpaque','')::numeric,1);
+  packs:=(line->>'cantidad')::numeric; units_per_pack:=COALESCE(NULLIF(line->>'unidadesPorEmpaque','')::numeric,1);
   pack_cost:=COALESCE(NULLIF(line->>'costoEmpaque','')::numeric,(line->>'costoUnitario')::numeric*units_per_pack);
   IF packs<=0 OR packs>999999 OR units_per_pack<=0 OR units_per_pack>999999 OR pack_cost<=0 OR pack_cost>99999999 THEN
    RAISE EXCEPTION 'PURCHASE_PACK_INVALID' USING ERRCODE='22023';
