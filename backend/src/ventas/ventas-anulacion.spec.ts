@@ -41,8 +41,9 @@ describe('VentasService.anular - contrato de seguridad', () => {
 
   it('serializa anulación y devolución bloqueando el mismo comprobante', () => {
     const returnsSource = readFileSync(join(__dirname, '../devoluciones/devoluciones.service.ts'), 'utf8');
-    const startReturn = returnsSource.indexOf('async registrar(');
-    const returnMethod = returnsSource.slice(startReturn);
+    const startReturn = returnsSource.indexOf('async crear(');
+    const endReturn = returnsSource.indexOf('\n  async ', startReturn + 10);
+    const returnMethod = returnsSource.slice(startReturn, endReturn > startReturn ? endReturn : undefined);
     expect(method).toContain("lock: { mode: 'pessimistic_write' }");
     expect(returnMethod).toContain('FROM comprobante c WHERE c.id=$1 AND c.empresa_id=$2 AND c.sucursal_id=ANY($3::int[]) FOR UPDATE');
     expect(returnMethod).toContain("if (venta.estado === 'ANULADA')");
