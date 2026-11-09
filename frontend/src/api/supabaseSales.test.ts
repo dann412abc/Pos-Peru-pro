@@ -17,7 +17,16 @@ const payload = {
 };
 
 describe('adaptador de ventas Supabase', () => {
-  beforeEach(() => { post.mockReset(); localStorage.clear(); });
+  beforeEach(() => {
+    const values = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.has(key) ? values.get(key)! : null,
+      setItem: (key: string, value: string) => { values.set(key, String(value)); },
+      removeItem: (key: string) => { values.delete(key); },
+      clear: () => { values.clear(); },
+    });
+    post.mockReset();
+  });
 
   it('llama exclusivamente a la RPC autenticada con p_payload', async () => {
     post.mockResolvedValue({ data: { ok: true, decision: 'CREATED', comprobanteId: 90, serie: 'B001', correlativo: 5, total: 10 } });
