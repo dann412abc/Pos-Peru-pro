@@ -6,32 +6,22 @@ const edge = fs.readFileSync(path.join(process.cwd(),'frontend/functions/api/edg
 const client = fs.readFileSync(path.join(process.cwd(),'frontend/src/api/supabaseReturns.ts'),'utf8');
 
 test('return register endpoint invokes the authenticated FEFO RPC with the exact payload contract',()=>{
-  assert.match(edge,/route === 'returns\\/register'/);
-  assert.match(edge,/pos_devolucion_registrar_auth/);
-  assert.match(edge,/p_comprobante_id:\\s*comprobanteId/);
-  assert.match(edge,/p_payload:\\s*\\{/);
+  assert.ok(edge.includes("route === 'returns/register'"));
+  assert.ok(edge.includes('pos_devolucion_registrar_auth'));
+  assert.ok(edge.includes('p_comprobante_id: comprobanteId'));
+  assert.ok(edge.includes('p_payload: {'));
   for (const arg of ['motivo','idempotencyKey','lineas','pagos']) assert.ok(edge.includes(arg));
-  assert.match(edge,/authorization: `Bearer \\${token}`/);
+  assert.ok(edge.includes('authorization: `Bearer ${token}`'));
 });
 
 test('return register endpoint validates ids, quantities, payment methods and duplicate lines',()=>{
-  assert.match(edge,/INVALID_RETURN_PAYLOAD/);
-  assert.match(edge,/DUPLICATE_RETURN_PAYMENT_METHOD/);
-  assert.match(edge,/Math\\.round\\(Number\\(x\\.cantidad\\) \\* 1000\\)/);
-  assert.match(edge,/Math\\.round\\(Number\\(x\\.monto\\) \\* 100\\)/);
+  for (const marker of ['INVALID_RETURN_PAYLOAD','DUPLICATE_RETURN_PAYMENT_METHOD','Math.round(Number(x.cantidad) * 1000)','Math.round(Number(x.monto) * 100)']) assert.ok(edge.includes(marker));
 });
 
 test('Supabase return client keeps authenticated session and validates committed result',()=>{
-  assert.match(client,/registerSupabaseReturn/);
-  assert.match(client,/\\/api\\/edge\\/returns\\/register/);
-  assert.match(client,/headers: authHeaders\\(\\)/);
-  assert.match(client,/result\\.totalDevolucion/);
-  assert.match(client,/result\\.creditoRevertido/);
-  assert.match(client,/result\\.montoReembolsado/);
+  for (const marker of ['registerSupabaseReturn','/api/edge/returns/register','headers: authHeaders()','result.totalDevolucion','result.creditoRevertido','result.montoReembolsado']) assert.ok(client.includes(marker));
 });
 
 test('preflight remains read-only and distinct from commit',()=>{
-  assert.match(client,/preflightSupabaseReturn/);
-  assert.match(client,/pos_devolucion_prevalidar_auth/);
-  assert.match(client,/registerSupabaseReturn/);
+  for (const marker of ['preflightSupabaseReturn','pos_devolucion_prevalidar_auth','registerSupabaseReturn']) assert.ok(client.includes(marker));
 });
