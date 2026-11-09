@@ -165,3 +165,15 @@ Se inspeccionó además que el índice único de idempotencia por empresa ya exi
 El formulario actual calcula el total como cantidad de empaques × unidades por empaque × costo por unidad, redondeado a dos decimales. No aplica IGV adicional en ese cálculo, aunque `compra_linea` conserva columnas `base_imponible`, `igv` y `subtotal`. La RPC debe reproducir exactamente la semántica del backend vigente o corregirla de manera coordinada; no se debe inventar una tasa ni sumar IGV por intuición. Este punto queda como bloqueo para cerrar la función SQL.
 
 La migración 004 y su prueba estática están en la rama de trabajo. No se han ejecutado tests, no se aplicó SQL en staging ni en producción y la RPC de recepción sigue pendiente.
+
+
+## Corrección — índice único de líneas de compra
+
+La revisión del catálogo real de PostgreSQL confirmó que `uq_compra_linea_producto` está creado como **índice único**, no como constraint. Por ello, la instrucción anterior `DROP CONSTRAINT IF EXISTS` no lo eliminaba y el índice nuevo por producto/variante podía coexistir con la regla antigua, bloqueando todavía dos variantes del mismo producto.
+
+Corrección preparada en la rama:
+- Se agrega `DROP INDEX IF EXISTS public.uq_compra_linea_producto` antes del nuevo índice compuesto por producto y variante.
+- Se conserva también `DROP CONSTRAINT IF EXISTS` como protección ante instalaciones donde ese objeto sí sea una constraint.
+- Se actualiza la prueba estática para exigir la eliminación del índice real.
+
+No se ejecutó la migración ni se modificó Supabase. La corrección queda pendiente de validación automatizada y de aplicación en un entorno aislado.
