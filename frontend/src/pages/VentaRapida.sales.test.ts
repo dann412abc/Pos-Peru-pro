@@ -14,7 +14,7 @@ describe('barrera de cobro Supabase', () => {
   it('protege contra doble clic y conserva carrito si RPC falla', () => {
     expect(source).toMatch(/if \(cobroEnCurso\.current\) return/);
     expect(source).toMatch(/cobroEnCurso\.current = false/);
-    expect(source).toMatch(/No se envió la venta a NestJS ni a la cola offline/);
+    expect(source).toMatch(/Nunca deriva a NestJS ni a una cola offline/);
   });
 
   it('solo vacía carrito tras finalizar el flujo sin excepción', () => {
