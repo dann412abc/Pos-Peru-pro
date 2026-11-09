@@ -315,7 +315,7 @@ export async function onRequest({ request, env, params }) {
     } catch { return json({ error: 'CASH_SUMMARY_UNAVAILABLE', message: 'No se pudo consultar el resumen de caja en Supabase.' }, 502); }
   }
 
-  // Consultas de devoluciones en Supabase: solo lectura; el registro permanece bloqueado hasta completar la RPC transaccional.
+  // Consultas de devoluciones en Supabase: historial, búsqueda y disponibilidad; el registro usa la ruta transaccional independiente.
   if (request.method === 'GET' && ['returns/list','returns/search','returns/availability'].includes(route)) {
     const token = getBearer(request);
     if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
