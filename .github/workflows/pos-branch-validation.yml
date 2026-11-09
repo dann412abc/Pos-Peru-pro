@@ -59,9 +59,6 @@ jobs:
       - name: Validate returns staging harness safety
         working-directory: frontend
         run: node --test ../supabase/tests/returns-staging-harness.test.mjs ../supabase/tests/returns-transaction-staging.integration.test.mjs ../supabase/migrations-preview/202611090003_returns_register_fefo_auth.test.mjs ../supabase/migrations-preview/202611090012_returns_transactional_writer_auth.test.mjs
-      - name: Validate returns staging harness safety
-        working-directory: frontend
-        run: node --test ../supabase/tests/returns-staging-harness.test.mjs ../supabase/tests/returns-transaction-staging.integration.test.mjs
       - name: Run focused Edge routing smoke tests
         working-directory: frontend
         run: npm run test:edge-smoke
