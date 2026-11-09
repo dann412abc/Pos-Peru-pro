@@ -384,6 +384,42 @@ export async function onRequest({ request, env, params }) {
   }
 
   // Ajustes de inventario con lotes e idempotencia; la autorización final vive en PostgreSQL.
+  // Transferencias atómicas entre sucursales: el SQL valida permisos, stock y lotes FEFO.
+  if (request.method === 'POST' && route === 'inventory/transfers') {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+    const p = body?.payload;
+    const validId = (v) => Number.isSafeInteger(v) && v > 0;
+    if (!p || typeof p !== 'object' || Array.isArray(p) ||
+        !validId(p.sucursalOrigenId) || !validId(p.sucursalDestinoId) ||
+        p.sucursalOrigenId === p.sucursalDestinoId ||
+        typeof p.motivo !== 'string' || p.motivo.trim().length < 5 || p.motivo.length > 200 ||
+        typeof p.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(p.idempotencyKey) ||
+        !Array.isArray(p.lineas) || p.lineas.length < 1 || p.lineas.length > 200 ||
+        p.lineas.some(x => !x || typeof x !== 'object' || Array.isArray(x) ||
+          !validId(x.productoId) || !(x.varianteId == null || validId(x.varianteId)) ||
+          typeof x.cantidad !== 'number' || !Number.isFinite(x.cantidad) || x.cantidad <= 0 ||
+          Math.round(x.cantidad * 1000) !== x.cantidad * 1000) ||
+        new Set(p.lineas.map(x => `${x.productoId}:${x.varianteId ?? 'base'}`)).size !== p.lineas.length) {
+      return json({ error: 'INVALID_INVENTORY_TRANSFER', message: 'Verifica sucursales, productos, variantes, cantidades, motivo y clave de operación.' }, 400);
+    }
+    const encoded = JSON.stringify({ p_payload: { ...p, motivo: p.motivo.trim() } });
+    if (encoded.length > 64000) return json({ error: 'INVENTORY_TRANSFER_TOO_LARGE' }, 413);
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_inventario_transferir_auth', supabase), {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: encoded,
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'INVENTORY_TRANSFER_MIGRATION_REQUIRED', message: 'La transferencia segura no está instalada en staging; no se modificó el inventario.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_TRANSFER_FORBIDDEN', message: 'No tienes permiso para transferir entre estas sucursales.' }, 403);
+      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+    } catch { return json({ error: 'INVENTORY_TRANSFER_UNAVAILABLE', message: 'No se pudo confirmar la transferencia. Conserva la misma clave para reintentar.' }, 502); }
+  }
+
   if (request.method === 'POST' && route === 'inventory/adjust') {
     const token = getBearer(request);
     if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
