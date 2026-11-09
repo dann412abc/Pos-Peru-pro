@@ -54,7 +54,7 @@ BEGIN
  COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='YAPE'),0),
  COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='PLIN'),0)
  INTO v_mov_efectivo,v_mov_tarjeta,v_mov_yape,v_mov_plin
- FROM public.caja_movimiento WHERE caja_id=p_caja_id AND usuario_id=v_usuario;
+ FROM public.caja_movimiento WHERE caja_id=p_caja_id AND usuario_id=v_usuario AND devolucion_venta_id IS NULL;
  v_efectivo_esperado:=round(COALESCE(v_saldo,0)+COALESCE(v_efectivo,0)-COALESCE(v_dev_efectivo,0)+COALESCE(v_mov_efectivo,0),2);
  RETURN jsonb_build_object(
  'cantidadVentas',v_ventas,'totalVentas',v_total,'totalDevoluciones',round(COALESCE(v_dev_total,0),2),
@@ -83,7 +83,7 @@ BEGIN
  SELECT COALESCE(jsonb_agg(x.item ORDER BY x.fecha DESC,x.orden DESC),'[]'::jsonb) INTO v_result FROM (
   SELECT jsonb_build_object('id',cm.id,'tipo',cm.tipo,'metodoPago',cm.metodo_pago,'monto',cm.monto,'motivo',cm.motivo,'createdAt',cm.created_at) item,
    cm.created_at fecha,cm.id orden
-  FROM public.caja_movimiento cm WHERE cm.caja_id=p_caja_id AND cm.usuario_id=v_usuario
+  FROM public.caja_movimiento cm WHERE cm.caja_id=p_caja_id AND cm.usuario_id=v_usuario AND cm.devolucion_venta_id IS NULL
   UNION ALL
   SELECT jsonb_build_object('id',-dp.id,'tipo','SALIDA','metodoPago',dp.metodo_pago,'monto',dp.monto,
     'motivo','Reembolso devolución #'||d.id,'createdAt',dp.created_at) item,dp.created_at fecha,-dp.id orden
