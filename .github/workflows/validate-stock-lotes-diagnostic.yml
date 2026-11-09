@@ -46,7 +46,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d stock_lotes_test -At -F '|' -f supabase/diagnosticos/20261108_auditoria_stock_vs_lotes_fefo_solo_lectura.sql > /tmp/stock-lotes.txt
+          # Bloqueo preventivo: el archivo de diagnóstico no puede contener sentencias de escritura/DDL.
+          sed '/^[[:space:]]*--/d' supabase/diagnosticos/20261108_auditoria_stock_vs_lotes_fefo_solo_lectura.sql > /tmp/diagnostico-sin-comentarios.sql
+          if grep -Eiq '(^|[;[:space:]])(INSERT|UPDATE|DELETE|TRUNCATE|ALTER|DROP|CREATE|CALL|DO)[[:space:]]' /tmp/diagnostico-sin-comentarios.sql; then
+            echo 'El diagnóstico contiene una sentencia que puede modificar datos o esquema' >&2
+            exit 1
+          fi
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d stock_lotes_test -At -F '|' -f /tmp/diagnostico-sin-comentarios.sql > /tmp/stock-lotes.txt
           grep -q '101|.*STOCK_SIN_LOTES_VIGENTES_Y_LOTES_VENCIDOS' /tmp/stock-lotes.txt
           grep -q '102|.*LOTES_SUPERAN_STOCK' /tmp/stock-lotes.txt
           grep -q '201|7|.*STOCK_SIN_LOTES_VIGENTES' /tmp/stock-lotes.txt
