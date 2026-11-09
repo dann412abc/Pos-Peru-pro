@@ -161,8 +161,8 @@ BEGIN
     WHERE cl.id=v_linea_id AND cl.comprobante_id=p_comprobante_id
     FOR UPDATE OF cl;
     IF NOT FOUND THEN RAISE EXCEPTION 'La línea no pertenece al comprobante' USING ERRCODE='22023'; END IF;
-    SELECT greatest(0,v_original.cantidad-coalesce(sum(dl.cantidad),0)),
-           greatest(0,v_original.subtotal-coalesce(sum(dl.monto),0))
+    SELECT greatest(0,v_original.cantidad-coalesce(sum(dl.cantidad) FILTER (WHERE d.id IS NOT NULL),0)),
+           greatest(0,v_original.subtotal-coalesce(sum(dl.monto) FILTER (WHERE d.id IS NOT NULL),0))
       INTO v_disponible,v_importe_disponible
     FROM public.devolucion_venta_linea dl
     JOIN public.devolucion_venta d ON d.id=dl.devolucion_id
