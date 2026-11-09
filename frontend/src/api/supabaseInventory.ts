@@ -136,3 +136,58 @@ export async function registrarMermaSupabase(payload: InventoryWastePayload): Pr
   }
   return response.data;
 }
+
+
+export interface InventoryCountOpenPayload {
+  sucursalId: number;
+  observacion: string;
+}
+
+function inventoryCountToken(): string {
+  const token = getAccessToken();
+  if (!token || token.startsWith('demo-')) throw new Error('Inicia sesión con Supabase para gestionar el inventario físico.');
+  return token;
+}
+
+async function inventoryCountRequest<T>(method: 'get' | 'post', path: string, data?: unknown): Promise<T> {
+  const token = inventoryCountToken();
+  const response = await axios.request<T>({
+    method, url: `/api/edge/inventory/counts${path}`, data,
+    headers: { Authorization: `Bearer ${token}` }, timeout: 45000,
+  });
+  return response.data;
+}
+
+/** Historial de inventarios físicos de las sucursales autorizadas por Supabase. */
+export function listarConteosFisicosSupabase(): Promise<any[]> {
+  return inventoryCountRequest<any[]>('get', '');
+}
+
+/** Abre el conteo y toma un snapshot de productos base y variantes. */
+export function abrirConteoFisicoSupabase(payload: InventoryCountOpenPayload): Promise<any> {
+  if (!Number.isSafeInteger(payload.sucursalId) || payload.sucursalId <= 0 ||
+      typeof payload.observacion !== 'string' || payload.observacion.trim().length < 5 ||
+      payload.observacion.trim().length > 200) throw new Error('Datos del inventario físico no válidos.');
+  return inventoryCountRequest<any>('post', '', { ...payload, observacion: payload.observacion.trim() });
+}
+
+/** Obtiene el detalle y cantidades contadas de un inventario físico. */
+export function detalleConteoFisicoSupabase(conteoId: number): Promise<any> {
+  if (!Number.isSafeInteger(conteoId) || conteoId <= 0) throw new Error('Inventario inválido.');
+  return inventoryCountRequest<any>('get', `/${conteoId}`);
+}
+
+/** Guarda una cantidad física con hasta tres decimales. */
+export function contarLineaFisicaSupabase(lineaId: number, cantidadContada: number): Promise<any> {
+  if (!Number.isSafeInteger(lineaId) || lineaId <= 0 || !Number.isFinite(cantidadContada) ||
+      cantidadContada < 0 || Math.round(cantidadContada * 1000) !== cantidadContada * 1000) {
+    throw new Error('La cantidad contada no es válida.');
+  }
+  return inventoryCountRequest<any>('post', '/lines/count', { lineaId, cantidadContada });
+}
+
+/** Cierra el conteo y aplica todas las diferencias dentro de una transacción PostgreSQL. */
+export function cerrarConteoFisicoSupabase(conteoId: number): Promise<any> {
+  if (!Number.isSafeInteger(conteoId) || conteoId <= 0) throw new Error('Inventario inválido.');
+  return inventoryCountRequest<any>('post', `/${conteoId}/close`);
+}
