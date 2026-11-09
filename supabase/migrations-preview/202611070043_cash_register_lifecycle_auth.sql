@@ -49,10 +49,10 @@ BEGIN
  IF p_tipo='SALIDA' AND p_metodo='EFECTIVO' THEN
   SELECT round(c.saldo_inicial + COALESCE((
     SELECT SUM(cp.monto) FROM public.comprobante_pago cp JOIN public.comprobante co ON co.id=cp.comprobante_id
-    WHERE co.caja_id=c.id AND co.empresa_id=v_empresa AND cp.metodo_pago='EFECTIVO' AND co.estado<>'ANULADA'
+    WHERE co.caja_id=c.id AND co.empresa_id=v_empresa AND cp.metodo_pago='EFECTIVO'
   ),0) + COALESCE((
     SELECT SUM(co.total) FROM public.comprobante co
-    WHERE co.caja_id=c.id AND co.empresa_id=v_empresa AND co.metodo_pago='EFECTIVO' AND co.estado<>'ANULADA'
+    WHERE co.caja_id=c.id AND co.empresa_id=v_empresa AND co.metodo_pago='EFECTIVO'
       AND NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=co.id)
   ),0) + COALESCE((
     SELECT SUM(CASE WHEN cm.tipo='INGRESO' THEN cm.monto ELSE -cm.monto END)
@@ -72,7 +72,7 @@ SET search_path=pg_catalog,public,auth
 AS $fn$
 DECLARE v_auth uuid:=auth.uid(); v_usuario integer; v_empresa integer; v_caja public.caja%ROWTYPE;
  v_efectivo numeric(12,2); v_tarjeta numeric(12,2); v_yape numeric(12,2); v_plin numeric(12,2); v_credito numeric(12,2);
- v_mov_efectivo numeric(12,2); v_mov_tarjeta numeric(12,2); v_mov_yape numeric(12,2); v_mov_plin numeric(12,2); v_esperado numeric(12,2); v_diferencia numeric(12,2); v_esperado_metodos jsonb;
+ v_efectivo_fisico numeric(12,2); v_mov_efectivo numeric(12,2); v_mov_tarjeta numeric(12,2); v_mov_yape numeric(12,2); v_mov_plin numeric(12,2); v_esperado numeric(12,2); v_diferencia numeric(12,2); v_esperado_metodos jsonb;
  v_metodo text; v_contado numeric(12,2); v_arqueo_final jsonb:='[]'::jsonb; v_item jsonb; v_item_metodo text; v_item_monto numeric;
 BEGIN
  IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
@@ -117,6 +117,18 @@ BEGIN
   WHERE co.caja_id=p_caja_id AND co.empresa_id=v_empresa AND co.estado<>'ANULADA'
    AND NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=co.id)
  ) p;
+ -- Efectivo físico: incluye ventas anuladas porque el cobro sí ingresó;
+ -- los reembolsos se descuentan una sola vez mediante caja_movimiento.
+ SELECT COALESCE(SUM(monto),0) INTO v_efectivo_fisico
+ FROM (
+  SELECT cp.monto FROM public.comprobante_pago cp
+  JOIN public.comprobante co ON co.id=cp.comprobante_id
+  WHERE co.caja_id=p_caja_id AND co.empresa_id=v_empresa AND cp.metodo_pago='EFECTIVO'
+  UNION ALL
+  SELECT co.total FROM public.comprobante co
+  WHERE co.caja_id=p_caja_id AND co.empresa_id=v_empresa AND co.metodo_pago='EFECTIVO'
+   AND NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=co.id)
+ ) cobros_efectivo_fisico;
  SELECT
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='EFECTIVO'),0),
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='TARJETA'),0),
@@ -124,7 +136,7 @@ BEGIN
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='PLIN'),0)
  INTO v_mov_efectivo,v_mov_tarjeta,v_mov_yape,v_mov_plin
  FROM public.caja_movimiento WHERE caja_id=p_caja_id;
- v_esperado:=round(COALESCE(v_caja.saldo_inicial,0)+v_efectivo+v_mov_efectivo,2);
+ v_esperado:=round(COALESCE(v_caja.saldo_inicial,0)+COALESCE(v_efectivo_fisico,0)+v_mov_efectivo,2);
  v_diferencia:=round(p_efectivo_contado-v_esperado,2);
  v_esperado_metodos:=jsonb_build_object(
   'EFECTIVO',v_esperado,
