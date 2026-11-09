@@ -43,6 +43,11 @@ BEGIN
   SELECT c.id,'TARJETA',30.00 FROM public.comprobante c
   WHERE c.caja_id=v_caja_id AND c.empresa_id=501 AND c.total=80.00;
 
+  -- Venta antigua anulada sin comprobante_pago: el efectivo físico ingresó y
+  -- debe seguir disponible; el reembolso se descuenta como movimiento de salida.
+  INSERT INTO public.comprobante(empresa_id,sucursal_id,caja_id,usuario_id,total,metodo_pago,estado)
+  VALUES (501,201,v_caja_id,101,25.00,'EFECTIVO','ANULADA');
+
   -- Devolución registrada: S/ 10 en efectivo y S/ 5 a tarjeta.
   INSERT INTO public.devolucion_venta(caja_id,empresa_id,estado,total_devolucion)
   VALUES (v_caja_id,501,'REGISTRADA',15.00);
@@ -59,7 +64,7 @@ BEGIN
   WHERE d.caja_id=v_caja_id AND d.empresa_id=501 AND d.total_devolucion=15.00;
 
   summary := public.pos_caja_resumen_auth(v_caja_id);
-  IF (summary->>'efectivoEsperado')::numeric <> 155.00 THEN
+  IF (summary->>'efectivoEsperado')::numeric <> 180.00 THEN
     RAISE EXCEPTION 'TEST_REFUND_CASH_DOUBLE_COUNT_OR_MISSING: %', summary;
   END IF;
   IF (summary->>'totalDevoluciones')::numeric <> 15.00
@@ -73,7 +78,12 @@ BEGIN
     RAISE EXCEPTION 'TEST_CASH_HISTORY_WITH_REFUND_FAILED: %', history;
   END IF;
 
-  closed := public.pos_caja_cerrar_auth(v_caja_id,155.00,'[]'::jsonb);
+  -- Una salida válida debe poder usar el efectivo de la venta antigua anulada.
+  movement := public.pos_caja_movimiento_auth(v_caja_id,'SALIDA','EFECTIVO',20.00,'Retiro de prueba');
+  IF COALESCE((movement->>'ok')::boolean,false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'TEST_LEGACY_CANCELED_CASH_WITHDRAWAL_FAILED: %', movement;
+  END IF;
+  closed := public.pos_caja_cerrar_auth(v_caja_id,160.00,'[]'::jsonb);
   IF closed->>'estado' <> 'CERRADA' OR (closed->>'diferencia')::numeric <> 0.00 THEN
     RAISE EXCEPTION 'TEST_CASH_CLOSE_FAILED: %', closed;
   END IF;
