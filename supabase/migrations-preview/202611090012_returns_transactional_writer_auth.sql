@@ -4,6 +4,60 @@
 -- No aplicar en producción sin validación funcional y respaldo.
 BEGIN;
 
+-- Fallar antes de crear la RPC si el esquema o las funciones de identidad no coinciden.
+DO $schema_guard$
+DECLARE
+  v_missing text;
+BEGIN
+  IF to_regprocedure('public.mi_usuario_id()') IS NULL
+     OR to_regprocedure('public.mi_empresa_id()') IS NULL
+     OR to_regprocedure('public.mi_rol()') IS NULL
+     OR to_regprocedure('public.mi_puede_ver_sucursal(integer)') IS NULL THEN
+    RAISE EXCEPTION 'RETURNS_AUTH_PREREQUISITES_MISSING: faltan funciones de identidad o autorización';
+  END IF;
+
+  SELECT string_agg(format('%I.%I',r.table_name,r.column_name),', ' ORDER BY r.table_name,r.column_name)
+    INTO v_missing
+  FROM (VALUES
+    ('comprobante','id'),('comprobante','empresa_id'),('comprobante','sucursal_id'),
+    ('comprobante','cliente_id'),('comprobante','tipo'),('comprobante','estado'),
+    ('comprobante_linea','id'),('comprobante_linea','comprobante_id'),
+    ('comprobante_linea','producto_id'),('comprobante_linea','variante_id'),
+    ('comprobante_linea','cantidad'),('comprobante_linea','subtotal'),
+    ('comprobante_pago','comprobante_id'),('comprobante_pago','metodo_pago'),('comprobante_pago','monto'),
+    ('caja','id'),('caja','sucursal_id'),('caja','usuario_id'),('caja','estado'),('caja','saldo_inicial'),
+    ('caja_movimiento','caja_id'),('caja_movimiento','usuario_id'),('caja_movimiento','tipo'),
+    ('caja_movimiento','metodo_pago'),('caja_movimiento','monto'),('caja_movimiento','motivo'),('caja_movimiento','comprobante_id'),
+    ('producto_stock','producto_id'),('producto_stock','sucursal_id'),('producto_stock','empresa_id'),
+    ('producto_stock','stock'),('producto_stock','updated_at'),
+    ('producto_variante_stock','variante_id'),('producto_variante_stock','producto_id'),
+    ('producto_variante_stock','sucursal_id'),('producto_variante_stock','empresa_id'),
+    ('producto_variante_stock','stock'),('producto_variante_stock','updated_at'),
+    ('movimiento_inventario','empresa_id'),('movimiento_inventario','sucursal_id'),
+    ('movimiento_inventario','producto_id'),('movimiento_inventario','variante_id'),
+    ('movimiento_inventario','comprobante_id'),('movimiento_inventario','usuario_id'),
+    ('movimiento_inventario','tipo'),('movimiento_inventario','cantidad'),
+    ('movimiento_inventario','stock_anterior'),('movimiento_inventario','stock_posterior'),('movimiento_inventario','motivo'),
+    ('cuenta_cobrar','id'),('cuenta_cobrar','comprobante_id'),('cuenta_cobrar','empresa_id'),
+    ('cuenta_cobrar','sucursal_id'),('cuenta_cobrar','saldo_pendiente'),('cuenta_cobrar','monto_revertido'),('cuenta_cobrar','estado'),('cuenta_cobrar','updated_at'),
+    ('cliente','id'),('cliente','empresa_id'),('cliente','saldo_credito'),
+    ('devolucion_venta','id'),('devolucion_venta','empresa_id'),('devolucion_venta','usuario_id'),
+    ('devolucion_venta','caja_id'),('devolucion_venta','request_hash'),('devolucion_venta','idempotency_key'),
+    ('devolucion_venta_linea','devolucion_id'),('devolucion_venta_linea','comprobante_linea_id'),
+    ('devolucion_venta_linea','variante_id'),('devolucion_venta_linea','cantidad'),('devolucion_venta_linea','monto'),
+    ('devolucion_venta_pago','devolucion_id'),('devolucion_venta_pago','metodo_pago'),('devolucion_venta_pago','monto')
+  ) AS r(table_name,column_name)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM information_schema.columns c
+    WHERE c.table_schema='public' AND c.table_name=r.table_name AND c.column_name=r.column_name
+  );
+
+  IF v_missing IS NOT NULL THEN
+    RAISE EXCEPTION 'RETURNS_SCHEMA_MISMATCH: faltan columnas requeridas: %',v_missing;
+  END IF;
+END
+$schema_guard$;
+
 -- El ledger de caja enlaza cada salida con la devolución que la originó.
 ALTER TABLE public.caja_movimiento
   ADD COLUMN IF NOT EXISTS devolucion_venta_id bigint;
