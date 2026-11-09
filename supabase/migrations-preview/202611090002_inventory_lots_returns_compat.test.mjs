@@ -38,3 +38,9 @@ test('migration is transaction-wrapped and does not seed sales or returns',()=>{
   assert.match(sql,/COMMIT;\s*$/);
   assert.doesNotMatch(sql,/INSERT INTO public\.(comprobante_lote_salida|devolucion_venta_lote)/i);
 });
+
+test('purchase lines support distinct variants but prevent duplicate product/variant pairs',()=>{
+  assert.match(sql,/DROP CONSTRAINT IF EXISTS uq_compra_linea_producto/);
+  assert.match(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante/);
+  assert.match(sql,/COALESCE\(variante_id,0\)/);
+});
