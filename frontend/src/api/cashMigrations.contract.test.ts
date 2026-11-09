@@ -23,7 +23,12 @@ describe('cash preview migrations: auth identity and refund reconciliation', () 
 
   it('does not subtract refund payments twice from expected cash', () => {
     const sql = migration('202611070045_cash_refund_reconciliation_auth.sql');
-    expect(sql).toContain('COALESCE(v_efectivo,0)+COALESCE(v_mov_efectivo,0)');
+    expect(sql).toContain('COALESCE(v_efectivo_fisico,0)+COALESCE(v_mov_efectivo,0)');
+    expect(sql).toContain('SELECT COALESCE(SUM(monto),0) INTO v_efectivo_fisico');
+    expect(sql).toContain("cp.metodo_pago='EFECTIVO'");
+    expect(sql).toContain("c.metodo_pago='EFECTIVO'");
+    expect(sql).toContain('NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=c.id)');
+    expect(sql).not.toContain("c.estado <> 'ANULADA' AND c.metodo_pago='EFECTIVO'");
     expect(sql).not.toContain('COALESCE(v_efectivo,0)-COALESCE(v_dev_efectivo,0)+COALESCE(v_mov_efectivo,0)');
   });
 
