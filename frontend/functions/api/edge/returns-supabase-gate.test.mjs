@@ -19,3 +19,13 @@ test('legacy flow remains available outside Supabase Auth mode',()=>{
  assert.match(page,/api\.post\(`\/devoluciones\/ventas\/\$\{disponibilidad\.comprobante\.id\}`/);
  assert.match(page,/api\.get\('\/devoluciones'/);
 });
+
+
+test('return search only offers document types accepted by the transactional return service',()=>{
+ assert.match(page,/\['01', '03'\]/);
+ assert.doesNotMatch(page,/\['01', '03', 'NV'\]/);
+ assert.match(page,/boletas y facturas/);
+ const readSql=fs.readFileSync(path.join(here,'../../../../supabase/migrations-preview/202611090001_returns_read_auth.sql'),'utf8');
+ assert.match(readSql,/c\.tipo IN \('01','03'\)/);
+ assert.doesNotMatch(readSql,/c\.tipo IN \('01','03','NV'\)/);
+});
