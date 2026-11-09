@@ -219,7 +219,7 @@ BEGIN
     IF v_actual IS NULL THEN RAISE EXCEPTION 'INVENTORY_COUNT_STOCK_MISSING'; END IF;
     v_delta:=round(v_line.cantidad_contada-v_actual,3);
     IF v_delta<>0 THEN
-      v_key:='COUNT-'||p_conteo_id||'-'||v_line.id;
+      v_key:='COUNT-INV-'||p_conteo_id||'-'||v_line.id;
       v_adjust:=public.pos_inventario_ajustar_lote_auth(jsonb_build_object(
         'sucursalId',v_cab.sucursal_id,'productoId',v_line.producto_id,'varianteId',v_line.variante_id,
         'tipo',CASE WHEN v_delta>0 THEN 'ENTRADA' ELSE 'SALIDA' END,
