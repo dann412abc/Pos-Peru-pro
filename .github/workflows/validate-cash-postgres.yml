@@ -65,3 +65,7 @@ jobs:
               'pos_caja_movimiento_auth','pos_caja_cerrar_auth',
               'pos_caja_movimientos_listar_auth'
             );" | grep -qx t
+      - name: Probar ciclo funcional de caja
+        env:
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d cash_migrations_test -f supabase/tests/cash-postgres/behavior.sql
