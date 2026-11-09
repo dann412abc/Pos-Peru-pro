@@ -8,7 +8,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const sql = fs.readFileSync(path.join(here, '202611090005_purchase_receive_auth.sql'), 'utf8');
 
 test('purchase receive RPC is preview-only and guarded by prerequisite schema', () => {
-  assert.match(sql, /^-- PREVIEW ONLY[\\s\\S]*?\\nBEGIN;/);
+  assert.ok(sql.startsWith('-- PREVIEW ONLY. Depends on migrations 002 and 004. Do not apply to production.'));
+  assert.ok(sql.includes('\nBEGIN;'));
   assert.match(sql, /PURCHASE_RECEIPT_SCHEMA_NOT_READY/);
   assert.match(sql, /COMMIT;\s*$/);
 });
