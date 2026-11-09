@@ -147,3 +147,21 @@ El esquema actual de compras no contiene una tabla `cuenta_pagar`; el saldo de c
 La caja no admite `TRANSFERENCIA` en `caja_movimiento`; las transferencias se guardan como `compra_pago` sin movimiento de caja física. Para EFECTIVO, YAPE, PLIN y TARJETA se requiere caja abierta válida y movimiento de tipo SALIDA.
 
 Estos cambios son preparación de contrato y esquema, no implementación de recepción. No se creó todavía `pos_compra_recibir_auth(jsonb)`; tampoco se ejecutaron tests ni migraciones en producción.
+
+## Avance — persistencia de vencimiento e idempotencia de compras
+
+Se añadió la migración preview `202611090004_purchase_receipt_fields.sql`, posterior a la preparación de lotes:
+
+- Agrega `compra.fecha_vencimiento`, que faltaba pese a que el formulario ya solicita esa fecha para compras a crédito.
+- Agrega `compra.payload_hash` para que la futura RPC compare el contenido normalizado de un reintento con la compra original.
+- Comprueba que exista el índice único remoto `uq_compra_empresa_idempotency` antes de preparar el cambio.
+- Añade restricciones para que contado no guarde vencimiento y para que el vencimiento de crédito no sea anterior al documento.
+- El hash queda limitado al formato hexadecimal MD5 de 32 caracteres. La futura RPC deberá calcularlo desde el JSONB normalizado y comparar antes de devolver una compra preexistente.
+
+Se inspeccionó además que el índice único de idempotencia por empresa ya existe en el esquema remoto. No se añadió un índice redundante.
+
+### Regla de cálculo pendiente de cerrar
+
+El formulario actual calcula el total como cantidad de empaques × unidades por empaque × costo por unidad, redondeado a dos decimales. No aplica IGV adicional en ese cálculo, aunque `compra_linea` conserva columnas `base_imponible`, `igv` y `subtotal`. La RPC debe reproducir exactamente la semántica del backend vigente o corregirla de manera coordinada; no se debe inventar una tasa ni sumar IGV por intuición. Este punto queda como bloqueo para cerrar la función SQL.
+
+La migración 004 y su prueba estática están en la rama de trabajo. No se han ejecutado tests, no se aplicó SQL en staging ni en producción y la RPC de recepción sigue pendiente.
