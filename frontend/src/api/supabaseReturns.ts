@@ -11,7 +11,18 @@ export async function fetchSupabaseReturns(sucursalId?: number): Promise<any[]> 
   if (sucursalId !== undefined && (!Number.isSafeInteger(sucursalId) || sucursalId <= 0)) throw new Error('Selecciona una sucursal válida.');
   const response = await axios.get('/api/edge/returns/list', { headers: authHeaders(), params: sucursalId ? { sucursalId } : {}, timeout: 15000 });
   if (!Array.isArray(response.data)) throw new Error('Supabase devolvió un historial de devoluciones inválido.');
-  return response.data;
+  return response.data.map((d: any) => ({
+    ...d,
+    id: Number(d.id),
+    comprobanteId: Number(d.comprobanteId),
+    sucursalId: Number(d.sucursalId),
+    correlativo: Number(d.correlativo),
+    totalDevolucion: Number(d.totalDevolucion),
+    creditoRevertido: Number(d.creditoRevertido),
+    montoReembolsado: Number(d.montoReembolsado),
+    createdAt: d.createdAt,
+    clienteNombre: d.clienteNombre || 'Cliente',
+  }));
 }
 
 export async function searchSupabaseReturnReceipts(termino: string, sucursalId?: number): Promise<any[]> {
