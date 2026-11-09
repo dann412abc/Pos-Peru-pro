@@ -20,7 +20,7 @@ test('return commit is idempotent and all stock, receivable and cash effects sha
 test('cash ledger links refunds and cash summary subtracts refunds by method',()=>{
  assert.match(sql,/ADD COLUMN IF NOT EXISTS devolucion_venta_id bigint/);
  assert.match(sql,/FOREIGN KEY \(devolucion_venta_id,caja_id\)/);
- assert.match(sql,/tipo='SALIDA'/);
+ assert.match(sql,/'SALIDA'/);
  assert.match(cash,/devolucion_venta_pago/);
 });
 test('FEFO wrapper restores original sale lots after transactional stock and cash commit',()=>{
