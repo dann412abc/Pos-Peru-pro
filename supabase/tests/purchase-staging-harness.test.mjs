@@ -23,7 +23,7 @@ test('successful receipt verifies purchase, payments, lines, lots, stock and wei
     'public.compra_pago', 'public.compra_linea', 'public.inventario_lote',
     'public.movimiento_inventario', 'public.caja_movimiento',
     'costo_promedio', 'scenario.expected.averageCost'
-  ]) assert.ok(runner.includes(token), \`missing assertion token: \${token}\`);
+  ]) assert.ok(runner.includes(token), `missing assertion token: ${token}`);
 });
 
 test('idempotent replay verifies no duplicate financial or inventory effects', () => {
@@ -49,6 +49,6 @@ test('committed concurrency test is opt-in and documents persistent staging effe
 test('fixture guide includes base product, variant, mixed payment, lot and rollback cases', () => {
   for (const token of ['authUserId', 'variantId', 'EFECTIVO', 'YAPE', 'TRANSFERENCIA',
     'codigoLote', 'rollbackCase', 'concurrencyCase', 'PGPASSWORD']) {
-    assert.ok(guide.includes(token), \`guide missing \${token}\`);
+    assert.ok(guide.includes(token), `guide missing ${token}`);
   }
 });
