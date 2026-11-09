@@ -38,6 +38,14 @@ describe('VentasService.anular - contrato de seguridad', () => {
     expect(caja).toBeLessThan(inventario);
   });
 
+  it('agrupa líneas repetidas por producto y variante antes de contrastar sus lotes', () => {
+    expect(method).toContain('const cantidadesDevueltas = new Map');
+    expect(method).toContain('const key = varianteId ? `v:${varianteId}` : `p:${linea.productoId}`');
+    expect(method).toContain('(prev?.cantidad || 0) + Number(linea.cantidad)');
+    expect(method).toContain('const cantidadAsignada = asignaciones.reduce');
+    expect(method).toContain('Math.abs(cantidadAsignada - cantidad) > 0.0005');
+  });
+
   it('restaura stock y lotes dentro de la misma transacción y deja movimiento de auditoría', () => {
     expect(method).toMatch(/UPDATE producto_stock SET stock=stock\+\$1/);
     expect(method).toMatch(/UPDATE producto_variante_stock SET stock=stock\+\$1/);
