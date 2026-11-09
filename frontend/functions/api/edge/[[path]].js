@@ -902,6 +902,54 @@ export async function onRequest({ request, env, params }) {
     } catch { return json({ error: 'INVENTORY_WASTE_UNAVAILABLE', message: 'No se pudo confirmar la merma. Conserva la misma clave para reintentar.' }, 502); }
   }
 
+  // Inventario físico: snapshot, conteo de líneas y cierre atómico mediante RPC autenticadas.
+  if (route === 'inventory/counts' || route.startsWith('inventory/counts/')) {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let rpc, args;
+    if (request.method === 'GET' && route === 'inventory/counts') {
+      rpc = 'pos_inventario_conteos_listar_auth'; args = {};
+    } else if (request.method === 'POST' && route === 'inventory/counts') {
+      let body; try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+      const sucursalId = body?.sucursalId;
+      const observacion = typeof body?.observacion === 'string' ? body.observacion.trim() : '';
+      if (!Number.isSafeInteger(sucursalId) || sucursalId <= 0 || observacion.length < 5 || observacion.length > 200) {
+        return json({ error: 'INVALID_INVENTORY_COUNT', message: 'Verifica sucursal y descripción del inventario.' }, 400);
+      }
+      rpc = 'pos_inventario_conteo_abrir_auth'; args = { p_sucursal_id: sucursalId, p_observacion: observacion };
+    } else {
+      const detail = route.match(/^inventory\/counts\/(\d+)$/);
+      const close = route.match(/^inventory\/counts\/(\d+)\/close$/);
+      if (request.method === 'GET' && detail) {
+        rpc = 'pos_inventario_conteo_detalle_auth'; args = { p_conteo_id: Number(detail[1]) };
+      } else if (request.method === 'POST' && close) {
+        rpc = 'pos_inventario_conteo_cerrar_auth'; args = { p_conteo_id: Number(close[1]) };
+      } else if (request.method === 'POST' && route === 'inventory/counts/lines/count') {
+        let body; try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+        if (!Number.isSafeInteger(body?.lineaId) || body.lineaId <= 0 ||
+            typeof body?.cantidadContada !== 'number' || !Number.isFinite(body.cantidadContada) ||
+            body.cantidadContada < 0 || Math.round(body.cantidadContada * 1000) !== body.cantidadContada * 1000) {
+          return json({ error: 'INVALID_INVENTORY_COUNT_LINE', message: 'Ingresa una cantidad válida con hasta 3 decimales.' }, 400);
+        }
+        rpc = 'pos_inventario_conteo_contar_auth'; args = { p_linea_id: body.lineaId, p_cantidad: body.cantidadContada };
+      } else {
+        return json({ error: 'INVENTORY_COUNT_ROUTE_NOT_FOUND' }, 404);
+      }
+    }
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/' + rpc, supabase), {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`,
+          'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: JSON.stringify(args),
+      });
+      const payload = await response.text();
+      if (response.status === 404) return json({ error: 'INVENTORY_COUNT_MIGRATION_REQUIRED', message: 'El inventario físico Supabase no está instalado en staging; no se aplicaron cambios.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_COUNT_FORBIDDEN', message: 'No tienes permiso para gestionar el inventario físico de esta sucursal.' }, 403);
+      return new Response(payload, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+    } catch { return json({ error: 'INVENTORY_COUNT_UNAVAILABLE', message: 'No se pudo confirmar la operación de inventario físico. Puedes reintentar sin duplicar el cierre.' }, 502); }
+  }
+
   if (request.method === 'POST' && route.startsWith('rpc/')) {
     const rpcName = route.slice(4);
     const allowlist = String(env.SUPABASE_RPC_ALLOWLIST || '').split(',').map(x => x.trim()).filter(Boolean);
