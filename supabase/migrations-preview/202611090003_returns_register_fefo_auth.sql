@@ -32,7 +32,7 @@ DECLARE
   v_lote record;
   v_result jsonb;
   v_asignaciones integer := 0;
-  v_cantidad_lote numeric(12,3);
+  v_costo_unitario numeric(12,4);
 BEGIN
   IF auth.uid() IS NULL OR v_usuario IS NULL OR v_empresa IS NULL
      OR public.mi_rol() IS DISTINCT FROM 'ADMIN' THEN
@@ -173,7 +173,7 @@ BEGIN
 
       -- Venta histórica sin asignaciones FEFO: lote de devolución identificado,
       -- sin atribuirle vencimiento ni procedencia que no constan en el comprobante.
-      SELECT cl.costo_unitario INTO v_cantidad_lote
+      SELECT cl.costo_unitario INTO v_costo_unitario
       FROM public.comprobante_linea cl
       WHERE cl.id=v_linea_id AND cl.comprobante_id=p_comprobante_id;
 
@@ -183,7 +183,7 @@ BEGIN
       )
       SELECT v_empresa,c.sucursal_id,v_producto_id,v_variante_id,
         'DEVCLIENTE-'||v_devolucion_id||'-'||v_linea_id,NULL,
-        v_pendiente,v_pendiente,COALESCE(v_cantidad_lote,0)
+        v_pendiente,v_pendiente,COALESCE(v_costo_unitario,0)
       FROM public.comprobante c
       WHERE c.id=p_comprobante_id AND c.empresa_id=v_empresa;
 
