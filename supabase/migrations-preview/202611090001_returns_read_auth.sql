@@ -30,13 +30,12 @@ BEGIN
       d.created_at AS "createdAt",c.tipo,c.serie,c.correlativo,
       cl.nombre AS "clienteNombre",u.nombre AS responsable,
       (SELECT count(*)::integer FROM public.devolucion_venta_linea dl WHERE dl.devolucion_id=d.id) AS lineas,
-      nc.id AS "notaCreditoId",nc.serie AS "notaCreditoSerie",nc.correlativo AS "notaCreditoCorrelativo",
+      NULL::integer AS "notaCreditoId",NULL::text AS "notaCreditoSerie",NULL::integer AS "notaCreditoCorrelativo",
       d.created_at
     FROM public.devolucion_venta d
     JOIN public.comprobante c ON c.id=d.comprobante_id AND c.empresa_id=d.empresa_id
     JOIN public.cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
     JOIN public.usuario u ON u.id=d.usuario_id AND u.empresa_id=d.empresa_id
-    LEFT JOIN public.comprobante nc ON nc.devolucion_venta_id=d.id AND nc.empresa_id=d.empresa_id AND nc.tipo='07'
     WHERE d.empresa_id=v_empresa AND (p_sucursal_id IS NULL OR d.sucursal_id=p_sucursal_id)
       AND public.mi_puede_ver_sucursal(d.sucursal_id)
     ORDER BY d.created_at DESC,d.id DESC
@@ -79,7 +78,7 @@ BEGIN
     FROM public.comprobante c
     JOIN public.cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
     WHERE c.empresa_id=v_empresa AND (p_sucursal_id IS NULL OR c.sucursal_id=p_sucursal_id)
-      AND c.tipo IN ('01','03') AND c.estado<>'ANULADA'
+      AND c.tipo IN ('01','03','NV') AND c.estado<>'ANULADA'
       AND public.mi_puede_ver_sucursal(c.sucursal_id)
       AND (c.serie ILIKE '%'||v_q||'%' OR c.correlativo::text ILIKE '%'||v_q||'%'
         OR (c.serie||'-'||lpad(c.correlativo::text,8,'0')) ILIKE '%'||v_q||'%'
