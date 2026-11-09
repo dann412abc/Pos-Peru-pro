@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS public.comprobante_lote_salida (
   id bigserial PRIMARY KEY,
   empresa_id integer NOT NULL,
   comprobante_id integer NOT NULL,
+  comprobante_linea_id integer,
   lote_id bigint NOT NULL REFERENCES public.inventario_lote(id) ON DELETE RESTRICT,
   producto_id integer NOT NULL REFERENCES public.producto(id) ON DELETE RESTRICT,
   variante_id bigint REFERENCES public.producto_variante(id) ON DELETE RESTRICT,
@@ -119,6 +120,26 @@ CREATE TABLE IF NOT EXISTS public.comprobante_lote_salida (
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT fk_lote_salida_comprobante FOREIGN KEY (comprobante_id) REFERENCES public.comprobante(id) ON DELETE RESTRICT
 );
+
+-- Each lot consumption is tied to one exact sale line; repeated product/variant
+-- lines in the same receipt are therefore unambiguous for partial returns.
+ALTER TABLE public.comprobante_lote_salida
+  ADD COLUMN IF NOT EXISTS comprobante_linea_id integer;
+
+DO $sale_line_fk$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname='fk_lote_salida_comprobante_linea'
+      AND conrelid='public.comprobante_lote_salida'::regclass
+  ) THEN
+    ALTER TABLE public.comprobante_lote_salida
+      ADD CONSTRAINT fk_lote_salida_comprobante_linea
+      FOREIGN KEY (comprobante_linea_id)
+      REFERENCES public.comprobante_linea(id) ON DELETE RESTRICT;
+  END IF;
+END
+$sale_line_fk$;
 
 CREATE TABLE IF NOT EXISTS public.devolucion_venta_lote (
   id bigserial PRIMARY KEY,
@@ -136,6 +157,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_lote_compra_linea
   ON public.inventario_lote(compra_linea_id) WHERE compra_linea_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_comprobante_lote_salida
   ON public.comprobante_lote_salida(empresa_id,comprobante_id,producto_id,variante_id);
+CREATE INDEX IF NOT EXISTS idx_lote_salida_comprobante_linea
+  ON public.comprobante_lote_salida(empresa_id,comprobante_linea_id);
 CREATE INDEX IF NOT EXISTS idx_devolucion_venta_lote_lote
   ON public.devolucion_venta_lote(lote_id);
 
