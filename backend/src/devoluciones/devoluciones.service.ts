@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import {
   BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +6,7 @@ import { FeService } from '../fe/fe.service';
 import { Comprobante } from '../ventas/entities/comprobante.entity';
 import { SERIE_POR_DEFECTO } from '../common/enums';
 import { CrearDevolucionVentaDto } from './dto/crear-devolucion.dto';
+import { hashSolicitudDevolucion } from './devolucion-idempotency';
 import { calcularImporteDevolucion, distribuirDevolucion, redondearCantidad, redondearMonto, validarTotalReembolsos } from './devolucion-calculations';
 
 const money = redondearMonto;
@@ -22,19 +22,6 @@ export class DevolucionesService {
     return sucursalId ? [sucursalId] : permitidas;
   }
 
-  private hashSolicitud(comprobanteId: number, dto: CrearDevolucionVentaDto): string {
-    const contenido = {
-      comprobanteId: Number(comprobanteId),
-      motivo: dto.motivo.trim(),
-      lineas: [...(dto.lineas || [])].map((l) => ({
-        comprobanteLineaId: Number(l.comprobanteLineaId), cantidad: quantity(Number(l.cantidad)), reingresarStock: Boolean(l.reingresarStock),
-      })).sort((a, b) => a.comprobanteLineaId - b.comprobanteLineaId),
-      pagos: [...(dto.pagos || [])].map((p) => ({
-        metodoPago: p.metodoPago, monto: money(Number(p.monto)), referencia: (p.referencia || '').trim(),
-      })).sort((a, b) => `${a.metodoPago}:${a.monto}:${a.referencia}`.localeCompare(`${b.metodoPago}:${b.monto}:${b.referencia}`)),
-    };
-    return createHash('sha256').update(JSON.stringify(contenido)).digest('hex');
-  }
 
   async listar(empresaId: number, sucursalIds: number[], sucursalId?: number): Promise<any[]> {
     const ids = this.validarSucursales(sucursalIds, sucursalId);
@@ -256,7 +243,7 @@ export class DevolucionesService {
     if (!motivo || motivo.length < 5) throw new BadRequestException('Indique un motivo de al menos 5 caracteres');
     if (!clave || clave.length < 8 || clave.length > 100) throw new BadRequestException('La clave de operación es inválida');
     if (!Array.isArray(dto.lineas) || !dto.lineas.length || dto.lineas.length > 100) throw new BadRequestException('Seleccione al menos una línea para devolver');
-    const hash = this.hashSolicitud(comprobanteId, dto);
+    const hash = hashSolicitudDevolucion(comprobanteId, dto);
 
     try {
       await this.dataSource.transaction(async (manager: EntityManager) => {
