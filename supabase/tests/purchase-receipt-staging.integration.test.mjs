@@ -20,7 +20,7 @@ if (enabled) {
 function connectionConfig() {
   const required = ['PGHOST', 'PGDATABASE', 'PGUSER', 'PGPASSWORD'];
   for (const key of required) {
-    if (!process.env[key]) throw new Error(\`Missing \${key}; purchase staging tests require an explicit database connection.\`);
+    if (!process.env[key]) throw new Error(`Missing ${key}; purchase staging tests require an explicit database connection.`);
   }
   if (process.env.PGHOST.includes('pooler.supabase.com') && !process.env.PGPORT) {
     throw new Error('Set PGPORT explicitly for the Supabase pooler.');
@@ -53,7 +53,7 @@ async function setPrivilegedAssertionRole(client) {
 }
 
 async function readSnapshot(client, spec) {
-  const counts = await client.query(\`
+  const counts = await client.query(`
     SELECT
       (SELECT count(*)::int FROM public.compra WHERE empresa_id=$1) AS purchases,
       (SELECT count(*)::int FROM public.compra_linea cl
@@ -65,13 +65,13 @@ async function readSnapshot(client, spec) {
          WHERE empresa_id=$1 AND compra_id IS NOT NULL) AS inventory_movements,
       (SELECT count(*)::int FROM public.caja_movimiento cm
          WHERE cm.compra_id IN (SELECT id FROM public.compra WHERE empresa_id=$1)) AS cash_movements
-  \`, [spec.empresaId]);
+  `, [spec.empresaId]);
   let stock = null;
   let averageCost = null;
   if (spec.stock?.variantId) {
     const r = await client.query(
-      \`SELECT stock,costo_promedio FROM public.producto_variante_stock
-       WHERE empresa_id=$1 AND sucursal_id=$2 AND producto_id=$3 AND variante_id=$4\`,
+      `SELECT stock,costo_promedio FROM public.producto_variante_stock
+       WHERE empresa_id=$1 AND sucursal_id=$2 AND producto_id=$3 AND variante_id=$4`,
       [spec.empresaId, spec.sucursalId, spec.stock.productId, spec.stock.variantId]
     );
     assert.equal(r.rowCount, 1, 'variant stock fixture row must exist');
@@ -79,8 +79,8 @@ async function readSnapshot(client, spec) {
     averageCost = r.rows[0].costo_promedio == null ? null : Number(r.rows[0].costo_promedio);
   } else if (spec.stock?.productId) {
     const r = await client.query(
-      \`SELECT stock,costo_promedio FROM public.producto_stock
-       WHERE empresa_id=$1 AND sucursal_id=$2 AND producto_id=$3\`,
+      `SELECT stock,costo_promedio FROM public.producto_stock
+       WHERE empresa_id=$1 AND sucursal_id=$2 AND producto_id=$3`,
       [spec.empresaId, spec.sucursalId, spec.stock.productId]
     );
     assert.equal(r.rowCount, 1, 'product stock fixture row must exist');
@@ -109,9 +109,9 @@ function assertEffectCounts(before, after, expected) {
   };
   for (const [expectedField, countField] of Object.entries(fields)) {
     assert.ok(Number.isInteger(expected[expectedField]) && expected[expectedField] >= 0,
-      \`expected.\${expectedField} must be a non-negative integer\`);
+      `expected.${expectedField} must be a non-negative integer`);
     assert.equal(after.counts[countField] - before.counts[countField], expected[expectedField],
-      \`\${countField} must be written exactly once\`);
+      `${countField} must be written exactly once`);
   }
 }
 
@@ -122,7 +122,7 @@ test('purchase receipt staging requires explicit opt-in and a fixture', { skip: 
   assert.ok(fixture.rollbackCase?.payload, 'fixture.rollbackCase.payload is required');
 
   for (const scenario of fixture.successCases) {
-    await t.test(\`atomic receipt + idempotent replay: \${scenario.name}\`, async () => {
+    await t.test(`atomic receipt + idempotent replay: ${scenario.name}`, async () => {
       const client = new Client(connectionConfig());
       await client.connect();
       try {
@@ -137,8 +137,8 @@ test('purchase receipt staging requires explicit opt-in and a fixture', { skip: 
 
         await setPrivilegedAssertionRole(client);
         const header = await client.query(
-          \`SELECT id,empresa_id,sucursal_id,proveedor_id,total,pagado,saldo_pendiente,estado
-           FROM public.compra WHERE id=$1\`,
+          `SELECT id,empresa_id,sucursal_id,proveedor_id,total,pagado,saldo_pendiente,estado
+           FROM public.compra WHERE id=$1`,
           [result.compraId]
         );
         assert.equal(header.rowCount, 1, 'created purchase must be visible in the transaction');
@@ -158,9 +158,9 @@ test('purchase receipt staging requires explicit opt-in and a fixture', { skip: 
           'total must equal paid plus pending balance');
 
         const lines = await client.query(
-          \`SELECT producto_id,variante_id,cantidad,costo_unitario,stock_anterior,stock_posterior,
+          `SELECT producto_id,variante_id,cantidad,costo_unitario,stock_anterior,stock_posterior,
                   costo_promedio_anterior,costo_promedio_posterior
-           FROM public.compra_linea WHERE compra_id=$1 ORDER BY numero_linea\`,
+           FROM public.compra_linea WHERE compra_id=$1 ORDER BY numero_linea`,
           [result.compraId]
         );
         assert.equal(lines.rowCount, scenario.expected.purchaseLineCount);
