@@ -71,6 +71,9 @@ jobs:
       - name: Test Supabase cash reconciliation adapter
         working-directory: frontend
         run: npx vitest run src/api/supabaseCash.test.ts
+      - name: Validate cash register UI integration contract
+        working-directory: frontend
+        run: node --test tests/contracts/cash-ui-integration-contract.test.mjs
       - name: Type-check and build frontend
         working-directory: frontend
         run: npm run build
