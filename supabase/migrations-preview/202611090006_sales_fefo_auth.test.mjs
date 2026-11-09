@@ -43,3 +43,11 @@ test('sale and lot writes share one transaction and function is not public to an
   assert.match(sql,/^BEGIN;/);
   assert.match(sql,/COMMIT;\s*$/);
 });
+
+test('read-only recovery RPC validates request hash and complete FEFO trace',()=>{
+  assert.match(sql,/CREATE OR REPLACE FUNCTION public\.pos_venta_idempotencia_consultar_auth\(p_payload jsonb\)/);
+  assert.match(sql,/v_sale\.request_hash IS DISTINCT FROM v_hash/);
+  assert.match(sql,/TRACE_INCOMPLETE/);
+  assert.match(sql,/REVOKE ALL ON FUNCTION public\.pos_venta_idempotencia_consultar_auth\(jsonb\) FROM PUBLIC,anon/);
+  assert.match(sql,/GRANT EXECUTE ON FUNCTION public\.pos_venta_idempotencia_consultar_auth\(jsonb\) TO authenticated/);
+});
