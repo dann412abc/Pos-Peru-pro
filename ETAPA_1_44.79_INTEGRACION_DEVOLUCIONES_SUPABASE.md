@@ -219,3 +219,35 @@ El servicio legacy consulta `producto.tiene_variantes`, pero la consulta de colu
 También se confirmó que el catálogo `producto` contiene `tipo_igv`, mientras que `producto_variante` no declara un tipo IGV propio; la validación tributaria debe comparar la línea con `producto.tipo_igv`.
 
 No se implementó todavía la RPC: primero se está cerrando el contrato contra el esquema remoto para evitar una función que compile pero falle al ejecutarse por columnas inexistentes. Todas las consultas fueron de solo lectura.
+
+
+
+## Bloque siguiente — reglas legacy de compras y diferencias que debe corregir la RPC
+
+Se inspeccionaron el DTO, el controlador y el método `crearCompra` del backend vigente. La RPC Supabase debe respetar estas reglas confirmadas:
+
+- El endpoint de creación de compras está protegido por `@Roles(ADMIN)`; la RPC debe exigir ADMIN autenticado y autorización de sucursal.
+- Una compra al contado exige que la suma de pagos sea igual al total (tolerancia 0.01). Los pagos no pueden superar el total.
+- Los pagos EFECTIVO, TARJETA, YAPE y PLIN requieren `cajaId`; todos los pagos asociados a caja deben usar una sola caja abierta, del usuario y sucursal actuales.
+- TRANSFERENCIA no admite `cajaId` y se registra en `compra_pago` sin movimiento físico de caja.
+- Solo el pago EFECTIVO se contrasta contra el efectivo disponible; el cálculo incluye saldo inicial, cobros efectivos de comprobantes y movimientos de caja.
+- El backend valida máximo 200 líneas, máximo 8 pagos, métodos permitidos, montos positivos, clave de compra entre 8 y 100 caracteres y clave opcional por pago entre 8 y 100.
+- El costo unitario está expresado con IGV incluido; la regla exacta de cálculo por tipo 10/20/30 ya está descrita arriba.
+
+### Defectos e incompatibilidades del backend antiguo que no se deben replicar
+
+1. `crearCompra` y otros métodos consultan `producto.tiene_variantes`, columna ausente en producción. La RPC debe inferir si el producto tiene variantes consultando `producto_variante` y validar que la variante seleccionada pertenezca al producto/empresa.
+2. El backend legacy resuelve un conflicto de clave idempotente devolviendo la compra existente sin comparar el payload. La nueva RPC debe comparar `payload_hash`; misma clave y mismo contenido devuelve la compra previa, misma clave y contenido diferente devuelve conflicto.
+3. La clave idempotente de pago se valida por duplicidad dentro del arreglo, pero el backend no hace una recuperación segura de un pago previo por hash. La RPC debe evitar duplicar pagos y movimientos en reintentos.
+4. Los IDs de variantes son bigint en el esquema. La RPC debe usar bigint al consultar/validar `variante_id`, no asumir int4.
+5. El controlador solo permite ADMIN para compra nueva. No se debe abrir el registro a CAJERO por comodidad del POS.
+
+### Diferencia pendiente entre legacy y el contrato Edge actual
+
+El servicio legacy permite pagos parciales en una compra a crédito (solo impide que los pagos superen el total); el formulario/Edge Supabase actual rechaza pagos iniciales cuando `condicionPago='CREDITO'`. Esta diferencia debe resolverse explícitamente antes de implementar la RPC. Para no cambiar silenciosamente el comportamiento del sistema, la regla de negocio elegida debe quedar coordinada entre formulario, Edge y SQL. El backend legacy también exige pago íntegro para CONTADO.
+
+### Riesgo separado en recepción parcial de órdenes
+
+El flujo legacy `recepcionarOrdenCompra` registra primero la compra mediante `crearCompra` y actualiza la orden en una segunda transacción. La preconsulta de idempotencia también ocurre fuera de una transacción. Por ello no es un patrón seguro para copiar en Supabase: la futura recepción de orden debe bloquear la orden/líneas, verificar la clave idempotente y crear compra, lotes, stock, pagos y avance de cantidades/estado en una sola transacción.
+
+Este bloque es inspección de código y diseño del contrato. No se creó aún `pos_compra_recibir_auth(jsonb)`, no se ejecutaron pruebas y no se aplicó SQL en Supabase.
