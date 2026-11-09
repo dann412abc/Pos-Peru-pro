@@ -547,7 +547,7 @@ export default function VentaRapida() {
           const payloadSupabase = {
             sucursalId,
             clienteId: clienteIdVenta,
-            tipo: tipoComprobante as '01' | '03',
+            tipo: tipoComprobante as '01' | '03' | 'NV',
             pagos: pagosVenta,
             ...(pagoCredito ? { fechaVencimiento } : {}),
             ...(tieneDescuento ? { motivoDescuento: motivoDescuento.trim() } : {}),
@@ -751,6 +751,7 @@ export default function VentaRapida() {
           <select className="input text-sm" value={tipoComprobante} onChange={(e) => setTipoComprobante(e.target.value as TipoComprobante)}>
             <option value="03">Boleta (B001)</option>
             <option value="01">Factura (F001)</option>
+            <option value="NV">Nota de venta (N001)</option>
           </select>
         </div>
 
