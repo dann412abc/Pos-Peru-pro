@@ -42,3 +42,14 @@ CREATE TABLE public.devolucion_venta_pago (
  empresa_id integer NOT NULL, sucursal_id integer NOT NULL, metodo_pago varchar(10) NOT NULL,
  monto numeric(12,2) NOT NULL, referencia text, created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Permisos mínimos del fixture para insertar datos de prueba como authenticated.
+-- No representa ni sustituye las políticas RLS de producción.
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  public.usuario, public.sucursal, public.usuario_sucursal,
+  public.comprobante, public.comprobante_pago,
+  public.devolucion_venta, public.devolucion_venta_pago,
+  public.caja_movimiento
+TO authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
