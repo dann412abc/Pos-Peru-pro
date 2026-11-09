@@ -19,7 +19,7 @@ test('preflight validates available quantity, payment totals and Yape/Plin refer
   assert.match(sql, /v_pago<>v_reembolso/);
   assert.match(sql, /YAPE.*PLIN/s);
 });
-test('preflight is explicitly non-mutating', () => {
+test('preflight shares the backend idempotency lock domain and does not compute a misleading hash', () => {\n  assert.match(sql,/mi-carrito-pos:devolucion:/);\n  assert.doesNotMatch(sql,/pos-return-preflight:/);\n  assert.doesNotMatch(sql,/v_hash|md5\\(/);\n});\ntest('preflight is explicitly non-mutating', () => {
   assert.doesNotMatch(sql, /INSERT INTO public\.devolucion_venta\s*\(/i);
   assert.doesNotMatch(sql, /UPDATE public\.(producto_stock|producto_variante_stock|caja_movimiento|cuenta_cobrar)/i);
   assert.match(sql, /No se ha registrado ni modificado ningún dato/);
