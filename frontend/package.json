@@ -13,7 +13,8 @@
     "test:cash-contract": "node --test ../supabase/migrations-preview/202611070046_cash_register_end_to_end_contract.test.mjs",
     "test:purchases-contract": "node --test ../supabase/migrations-preview/202611090005_purchase_receive_auth.test.mjs",
     "test:purchase-sales-flow": "node --test ../supabase/migrations-preview/202611090047_purchase_sales_lot_flow_contract.test.mjs",
-    "test:edge-smoke": "vitest run functions/api/edge/edge.test.js"
+    "test:edge-smoke": "vitest run functions/api/edge/edge.test.js",
+    "test:returns-contract": "node --test ../supabase/migrations-preview/202611070043_cash_register_lifecycle_auth.test.mjs ../supabase/migrations-preview/202611070045_cash_refund_reconciliation_auth.test.mjs ../supabase/migrations-preview/202611090003_returns_register_fefo_auth.test.mjs ../supabase/migrations-preview/202611090012_returns_transactional_writer_auth.test.mjs ../frontend/functions/api/edge/returns-register-contract.test.mjs ../frontend/functions/api/edge/returns-supabase-gate.test.mjs"
   },
   "dependencies": {
     "axios": "^1.6.8",
