@@ -10,9 +10,9 @@ test('auth provider Supabase is exported explicitly for module routing',()=>{
  assert.match(client,/export const ES_SUPABASE_AUTH = SUPABASE_AUTH/);
 });
 test('Devoluciones does not call legacy endpoints while Supabase Auth is active',()=>{
- assert.match(page,/if \(ES_MODO_DEMO \|\| ES_SUPABASE_AUTH \|\| !sucursalId\) return/);
- assert.match(page,/if \(!ES_SUPABASE_AUTH\) recargar\(\)/);
- assert.match(page,/if \(ES_SUPABASE_AUTH\) return/);
+ assert.match(page,/if \(ES_MODO_DEMO \|\| !sucursalId\) return/);
+ assert.match(page,/if \(ES_SUPABASE_AUTH\) \{/);
+ assert.match(page,/fetchSupabaseReturns\(sucursalId\)/);
  assert.match(page,/API antigua/);
 });
 test('legacy flow remains available outside Supabase Auth mode',()=>{
