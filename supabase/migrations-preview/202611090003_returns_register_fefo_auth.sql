@@ -33,6 +33,7 @@ DECLARE
   v_result jsonb;
   v_asignaciones integer := 0;
   v_costo_unitario numeric(12,4);
+  v_nuevo_lote_id bigint;
 BEGIN
   IF auth.uid() IS NULL OR v_usuario IS NULL OR v_empresa IS NULL
      OR public.mi_rol() IS DISTINCT FROM 'ADMIN' THEN
@@ -185,7 +186,16 @@ BEGIN
         'DEVCLIENTE-'||v_devolucion_id||'-'||v_linea_id,NULL,
         v_pendiente,v_pendiente,COALESCE(v_costo_unitario,0)
       FROM public.comprobante c
-      WHERE c.id=p_comprobante_id AND c.empresa_id=v_empresa;
+      WHERE c.id=p_comprobante_id AND c.empresa_id=v_empresa
+      RETURNING id INTO v_nuevo_lote_id;
+
+      IF v_nuevo_lote_id IS NULL THEN
+        RAISE EXCEPTION 'No se pudo crear el lote de devolución histórica'
+          USING ERRCODE='P0001';
+      END IF;
+
+      INSERT INTO public.devolucion_venta_lote(devolucion_linea_id,lote_id,cantidad)
+      VALUES(v_linea_devolucion_id,v_nuevo_lote_id,v_pendiente);
 
       v_asignaciones:=v_asignaciones+1;
     END IF;
