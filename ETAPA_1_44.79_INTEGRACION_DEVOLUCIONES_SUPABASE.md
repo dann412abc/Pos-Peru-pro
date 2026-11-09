@@ -56,3 +56,26 @@ En el proyecto Supabase `POS AYNI PERÚ`:
 - No se desplegó Cloudflare.
 - No se modificó la rama principal ni el commit base 1.44.78.
 - Esta etapa prepara la integración en una rama de trabajo; no equivale a validación end-to-end.
+
+## Hallazgo crítico adicional — el circuito de lotes aún no está conectado a compras ni ventas
+
+Revisión de solo lectura realizada sobre las funciones del proyecto remoto POS AYNI PERÚ:
+
+- `public.pos_registrar_venta(jsonb)` valida y descuenta `producto_stock` o `producto_variante_stock`, inserta `comprobante_linea` y movimientos de inventario, pero su definición actual no consulta `inventario_lote` ni inserta `comprobante_lote_salida`.
+- En el conjunto de funciones públicas inspeccionadas no se encontró una RPC de recepción/registro de compras que cree lotes desde `compra_linea`.
+- `pos_ajustar_inventario` y `pos_transferir_inventario` tampoco integran la trazabilidad FEFO.
+- Por tanto, la migración 002 únicamente prepara estructura y lotes de apertura; no integra el writer de compras ni el de ventas.
+- La migración 003 no puede distinguir de forma fiable una venta histórica de una venta nueva sin lotes mientras el writer de ventas no genere `comprobante_lote_salida`. El fallback `DEVCLIENTE-*` no debe considerarse solución a esa falta de integración para ventas nuevas.
+
+### Decisión técnica de seguridad
+
+No activar ni aplicar las migraciones 002/003. No usar el fallback de lote histórico como sustituto de la integración FEFO en ventas nuevas.
+
+### Orden correcto del siguiente bloque
+
+1. Diseñar e integrar recepción de compras con creación atómica de `inventario_lote`, respetando empresa, sucursal, variante, cantidades, costo y vencimiento.
+2. Integrar `pos_registrar_venta(jsonb)` para consumir lotes FEFO y registrar `comprobante_lote_salida` asociado inequívocamente a cada línea de comprobante, dentro de la misma transacción que descuenta el stock.
+3. Integrar ajustes y transferencias con lotes, o bloquearlos cuando no puedan preservar trazabilidad.
+4. Recién después, habilitar la restitución de lotes de la devolución y probar el circuito completo en un entorno de pruebas aislado.
+
+La inspección fue de solo lectura. No se aplicó SQL, no se escribieron datos y producción permanece intacta.
