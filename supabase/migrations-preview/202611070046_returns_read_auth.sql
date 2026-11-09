@@ -18,7 +18,7 @@ BEGIN
    'responsable',u.nombre,'lineas',(SELECT count(*) FROM public.devolucion_venta_linea dl WHERE dl.devolucion_id=d.id),
    'notaCreditoId',nc.id,'notaCreditoSerie',nc.serie,'notaCreditoCorrelativo',nc.correlativo) AS x
   FROM public.devolucion_venta d JOIN public.comprobante c ON c.id=d.comprobante_id AND c.empresa_id=d.empresa_id
-  JOIN public.cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
+  LEFT JOIN public.cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
   JOIN public.usuario u ON u.id=d.usuario_id AND u.empresa_id=d.empresa_id
   LEFT JOIN public.comprobante nc ON nc.devolucion_venta_id=d.id AND nc.empresa_id=d.empresa_id AND nc.tipo='07'
   WHERE d.empresa_id=v_empresa AND d.sucursal_id=ANY(v_ids) ORDER BY d.created_at DESC,d.id DESC LIMIT 300
@@ -38,7 +38,7 @@ BEGIN
  IF p_sucursal_id IS NOT NULL AND NOT (p_sucursal_id=ANY(v_ids)) THEN RAISE EXCEPTION 'Sucursal no autorizada' USING ERRCODE='42501'; END IF;
  RETURN COALESCE((SELECT jsonb_agg(to_jsonb(r)) FROM (
   SELECT c.id,c.tipo,c.serie,c.correlativo,c.total,c.estado,c.fecha_emision AS "fechaEmision",jsonb_build_object('nombre',cl.nombre) AS cliente
-  FROM public.comprobante c JOIN public.cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
+  FROM public.comprobante c LEFT JOIN public.cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
   WHERE c.empresa_id=v_empresa AND c.sucursal_id=ANY(v_ids) AND c.tipo IN ('01','03') AND c.estado<>'ANULADA'
    AND (c.serie ILIKE '%'||v_q||'%' OR c.correlativo::text ILIKE '%'||v_q||'%' OR (c.serie||'-'||lpad(c.correlativo::text,8,'0')) ILIKE '%'||v_q||'%' OR cl.nombre ILIKE '%'||v_q||'%' OR COALESCE(cl.numero,'') ILIKE '%'||v_q||'%')
   ORDER BY c.fecha_emision DESC,c.id DESC LIMIT 100
@@ -54,7 +54,7 @@ BEGIN
  IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
  SELECT COALESCE(array_agg(us.sucursal_id),ARRAY[]::integer[]) INTO v_ids FROM public.usuario_sucursal us JOIN public.sucursal s ON s.id=us.sucursal_id AND s.empresa_id=v_empresa WHERE us.usuario_id=v_usuario;
  SELECT to_jsonb(x) INTO v_c FROM (SELECT c.id,c.sucursal_id AS "sucursalId",c.cliente_id AS "clienteId",c.tipo,c.serie,c.correlativo,c.total,c.estado,c.fecha_emision AS "fechaEmision",cl.nombre AS "clienteNombre"
-  FROM public.comprobante c JOIN public.cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
+  FROM public.comprobante c LEFT JOIN public.cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
   WHERE c.id=p_comprobante_id AND c.empresa_id=v_empresa AND c.sucursal_id=ANY(v_ids)) x;
  IF v_c IS NULL THEN RAISE EXCEPTION 'Comprobante no encontrado o no autorizado' USING ERRCODE='42501'; END IF;
  IF v_c->>'tipo' NOT IN ('01','03') THEN RAISE EXCEPTION 'Solo se permiten devoluciones de boletas y facturas' USING ERRCODE='22023'; END IF;
