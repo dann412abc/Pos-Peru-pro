@@ -15,7 +15,7 @@ test('el arnés deriva identidad JWT de prueba y asume rol authenticated', () =>
   assert.match(runner, /request\.jwt\.claim\.sub/);
   assert.match(runner, /SET LOCAL ROLE authenticated/);
   assert.match(runner, /pos_registrar_venta_fefo_auth/);
-  assert.doesNotMatch(runner, /SELECT public\\.pos_venta_crear_auth/);
+  assert.doesNotMatch(runner, /SELECT public\.pos_venta_crear_auth/);
 });
 
 test('los escenarios normales revierten la transacción y el fallo usa savepoint', () => {
