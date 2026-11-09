@@ -125,6 +125,8 @@ export function etiquetaComprobante(tipo: string): string {
       return 'Factura';
     case '03':
       return 'Boleta';
+    case 'NV':
+      return 'Nota de venta';
     case '07':
       return 'Nota de Crédito';
     case '08':
@@ -134,10 +136,11 @@ export function etiquetaComprobante(tipo: string): string {
   }
 }
 
-/** Sugiere serie según tipo de comprobante: F001 factura, B001 boleta, NC01 NC. */
+/** Sugiere serie según tipo de comprobante: F001 factura, B001 boleta, N001 nota de venta, NC01 NC. */
 export function serieSegunTipo(tipo: string, config?: { serieFactura?: string; serieBoleta?: string; serieNC?: string }): string {
   if (tipo === '01') return config?.serieFactura || 'F001';
   if (tipo === '03') return config?.serieBoleta || 'B001';
+  if (tipo === 'NV') return 'N001';
   if (tipo === '07') return config?.serieNC || 'NC01';
   if (tipo === '08') return config?.serieNC || 'ND01';
   return 'B001';
