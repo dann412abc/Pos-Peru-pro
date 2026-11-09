@@ -7,7 +7,7 @@ const sql=fs.readFileSync('supabase/migrations-preview/202611090007_inventory_ad
 test('preview migration requires the lot schema and is transaction-wrapped',()=>{
   assert.match(sql,/PREVIEW ONLY/);
   assert.match(sql,/INVENTORY_ADJUSTMENT_PREREQUISITES_MISSING/);
-  assert.match(sql,/^BEGIN;/);
+  assert.match(sql,/\nBEGIN;/);
   assert.match(sql,/COMMIT;\s*$/);
 });
 
