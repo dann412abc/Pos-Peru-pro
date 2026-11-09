@@ -3,8 +3,9 @@ import { AlertTriangle, ClipboardList, RefreshCw, Trash2, Download } from 'lucid
 import toast from 'react-hot-toast';
 import { api, ES_MODO_DEMO } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { listarLotesMermaSupabase, listarMermasSupabase, registrarMermaSupabase } from '../api/supabaseInventory';
 
-type Lote={id:number;sucursalNombre:string;productoNombre:string;varianteNombre:string|null;codigoLote:string;fechaVencimiento:string|null;cantidadDisponible:number;costoUnitario:number};
+type Lote={id:number;sucursalNombre:string;productoNombre:string;varianteNombre:string|null;codigoLote:string;fechaVencimiento:string|null;cantidadDisponible:number;costoUnitario:number;productoId?:number;varianteId?:number|null};
 type Merma={id:number;sucursalNombre:string;productoNombre:string;varianteNombre:string|null;codigoLote:string;fechaVencimiento:string|null;motivoTipo:string;observacion:string;cantidad:number;costoUnitario:number;costoTotal:number;usuarioNombre:string;createdAt:string};
 const money=(n:number)=>`S/ ${Number(n||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const qty=(n:number)=>Number(n||0).toLocaleString('es-PE',{maximumFractionDigits:3});
@@ -14,8 +15,13 @@ export default function Mermas(){
  const [loteId,setLoteId]=useState('');const [cantidad,setCantidad]=useState('1');const [motivoTipo,setMotivoTipo]=useState('VENCIDO');const [observacion,setObservacion]=useState('');
  const [cargando,setCargando]=useState(false);const [guardando,setGuardando]=useState(false);const [error,setError]=useState('');
  const cargar=useCallback(async()=>{if(ES_MODO_DEMO||!usuario?.sucursalId)return;setCargando(true);setError('');try{
-  const [a,b]=await Promise.all([api.get('/inventario/lotes-disponibles'),api.get('/inventario/mermas')]);
-  setLotes(Array.isArray(a.data)?a.data:[]);setHistorial(Array.isArray(b.data)?b.data:[]);
+  if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
+   const [a,b]=await Promise.all([listarLotesMermaSupabase(Number(usuario.sucursalId)),listarMermasSupabase(Number(usuario.sucursalId))]);
+   setLotes(a as Lote[]);setHistorial(b as Merma[]);
+  } else {
+   const [a,b]=await Promise.all([api.get('/inventario/lotes-disponibles'),api.get('/inventario/mermas')]);
+   setLotes(Array.isArray(a.data)?a.data:[]);setHistorial(Array.isArray(b.data)?b.data:[]);
+  }
  }catch(e:any){setError(e?.response?.data?.message||'No se pudo cargar el control de mermas. Verifica la migración de la etapa 32.');}finally{setCargando(false);}},[usuario?.sucursalId]);
  useEffect(()=>{cargar();},[cargar]);
  const lote=useMemo(()=>lotes.find(x=>String(x.id)===loteId),[lotes,loteId]);
@@ -26,7 +32,18 @@ export default function Mermas(){
   if(observacion.trim().length<5){toast.error('Describe el motivo con al menos 5 caracteres');return;}
   if(!window.confirm(`Se descontarán ${qty(n)} unidades del lote ${lote.codigoLote}. Costo estimado de la merma: ${money(n*Number(lote.costoUnitario))}. ¿Confirmas?`))return;
   setGuardando(true);try{
-   await api.post('/inventario/mermas',{loteId:lote.id,cantidad:n,motivoTipo,observacion:observacion.trim(),idempotencyKey:crypto.randomUUID()});
+   const idempotencyKey = crypto.randomUUID();
+   if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
+    if (!lote.productoId) throw new Error('El lote no contiene el producto asociado; actualiza el esquema de mermas en staging.');
+    await registrarMermaSupabase({
+     sucursalId: Number(usuario?.sucursalId), productoId: Number(lote.productoId),
+     varianteId: lote.varianteId == null ? null : Number(lote.varianteId),
+     cantidad: n, motivoTipo: motivoTipo as 'VENCIDO'|'DANADO'|'PERDIDA'|'CONTAMINACION'|'OTRO',
+     observacion: observacion.trim(), idempotencyKey,
+    });
+   } else {
+    await api.post('/inventario/mermas',{loteId:lote.id,cantidad:n,motivoTipo,observacion:observacion.trim(),idempotencyKey});
+   }
    toast.success('Merma registrada y stock actualizado');setCantidad('1');setObservacion('');await cargar();
   }catch(e:any){toast.error(e?.response?.data?.message||'No se pudo registrar la merma');}finally{setGuardando(false);}
  }
