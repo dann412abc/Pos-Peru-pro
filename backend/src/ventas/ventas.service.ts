@@ -730,6 +730,9 @@ export class VentasService {
             `No se puede anular: la venta ${c.serie}-${c.correlativo} no tiene trazabilidad de lotes para ${varianteId ? `la variante ${varianteId}` : `el producto ${productoId}`}. Se requiere regularización de inventario.`,
           );
         }
+        if (asignaciones.some((a) => !Number.isFinite(Number(a.cantidad)) || Number(a.cantidad) <= 0)) {
+          throw new BadRequestException('No se puede anular: existe una asignación de lote con cantidad inválida.');
+        }
         const cantidadAsignada = asignaciones.reduce((sum, a) => sum + Number(a.cantidad), 0);
         if (Math.abs(cantidadAsignada - cantidad) > 0.0005) {
           throw new BadRequestException('No se puede anular: las cantidades de lotes no coinciden con las líneas de venta.');
@@ -740,11 +743,14 @@ export class VentasService {
              SET cantidad_disponible=cantidad_disponible+$1
              WHERE id=$2 AND empresa_id=$3 AND sucursal_id=$4
                AND producto_id=$5 AND variante_id IS NOT DISTINCT FROM $6::int
+               AND cantidad_disponible >= 0
+               AND cantidad_inicial IS NOT NULL
+               AND cantidad_disponible+$1 <= cantidad_inicial
              RETURNING id`,
             [a.cantidad, a.lote_id, empresaId, c.sucursalId, productoId, varianteId],
           );
           if (!lote.length) {
-            throw new BadRequestException('No se puede anular: uno de los lotes originales ya no existe o no corresponde a esta venta.');
+            throw new BadRequestException('No se puede anular: la reposición superaría la cantidad inicial del lote o el lote no corresponde a esta venta y sucursal.');
           }
         }
         await manager.getRepository(MovimientoInventario).save({
