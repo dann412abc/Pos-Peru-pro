@@ -1,4 +1,4 @@
-import test, { before, after } from 'node:test';
+import test, { before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -93,6 +93,14 @@ before(async () => {
       INSERT INTO sale_lines VALUES(1,5);
       INSERT INTO inventory VALUES(1,0);
     `);
+  });
+});
+
+beforeEach(async () => {
+  await withClient(async (client) => {
+    await client.query('TRUNCATE cash_movements, return_lines, returns RESTART IDENTITY');
+    await client.query('UPDATE sale_lines SET quantity=5 WHERE id=1');
+    await client.query('UPDATE inventory SET quantity=0 WHERE id=1');
   });
 });
 
