@@ -14,8 +14,29 @@ BEGIN
      OR to_regclass('public.producto') IS NULL
      OR to_regclass('public.producto_variante') IS NULL
      OR to_regclass('public.sucursal') IS NULL
-     OR to_regclass('public.usuario') IS NULL THEN
+     OR to_regclass('public.usuario') IS NULL
+     OR to_regclass('public.uq_producto_variante_id_producto_empresa') IS NULL THEN
     RAISE EXCEPTION 'INVENTORY_COUNT_PREREQUISITES_MISSING';
+  END IF;
+
+  IF NOT (
+    SELECT count(*)=3 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='producto_variante_stock'
+      AND column_name IN ('variante_id','producto_id','costo_promedio')
+  ) OR NOT (
+    SELECT count(*)=3 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='producto_stock'
+      AND column_name IN ('stock','costo_promedio','producto_id')
+  ) OR NOT (
+    SELECT count(*)=4 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='inventario_lote'
+      AND column_name IN ('variante_id','cantidad_disponible','costo_unitario','fecha_vencimiento')
+  ) OR NOT (
+    SELECT count(*)=7 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='movimiento_inventario'
+      AND column_name IN ('id','empresa_id','sucursal_id','producto_id','variante_id','usuario_id','stock_anterior')
+  ) THEN
+    RAISE EXCEPTION 'INVENTORY_COUNT_SCHEMA_INCOMPATIBLE';
   END IF;
 END
 $guard$;
