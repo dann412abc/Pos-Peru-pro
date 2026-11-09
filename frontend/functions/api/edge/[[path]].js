@@ -383,6 +383,37 @@ export async function onRequest({ request, env, params }) {
     } catch { return json({ error: 'SUPPLIER_ANALYTICS_UNAVAILABLE', message: 'No se pudo consultar el análisis de proveedores en Supabase.' }, 502); }
   }
 
+  // Ajustes de inventario con lotes e idempotencia; la autorización final vive en PostgreSQL.
+  if (request.method === 'POST' && route === 'inventory/adjust') {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+    const validId = (v) => Number.isSafeInteger(v) && v > 0;
+    const p = body?.payload;
+    if (!p || typeof p !== 'object' || Array.isArray(p) ||
+        !validId(p.sucursalId) || !validId(p.productoId) ||
+        !(p.varianteId == null || validId(p.varianteId)) ||
+        !['ENTRADA','SALIDA'].includes(p.tipo) ||
+        typeof p.cantidad !== 'number' || !Number.isFinite(p.cantidad) || p.cantidad <= 0 ||
+        Math.round(p.cantidad * 1000) !== p.cantidad * 1000 ||
+        typeof p.motivo !== 'string' || p.motivo.trim().length < 5 || p.motivo.length > 200 ||
+        typeof p.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(p.idempotencyKey)) {
+      return json({ error: 'INVALID_INVENTORY_ADJUSTMENT', message: 'Verifica sucursal, producto, variante, tipo, cantidad, motivo y clave de operación.' }, 400);
+    }
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_inventario_ajustar_lote_auth', supabase), {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: JSON.stringify({ p_payload: p }),
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'INVENTORY_ADJUSTMENT_MIGRATION_REQUIRED', message: 'Falta instalar el ajuste de inventario con lotes en el entorno de pruebas; no se modificó el stock.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_ADJUSTMENT_FORBIDDEN', message: 'No tienes permisos para ajustar este inventario.' }, 403);
+      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+    } catch { return json({ error: 'INVENTORY_ADJUSTMENT_UNAVAILABLE', message: 'No se pudo registrar el ajuste.' }, 502); }
+  }
+
   // Control de vencimientos: consulta de solo lectura por sucursal autorizada.
   if (request.method === 'GET' && route === 'inventory/expiries') {
     const token = getBearer(request);
