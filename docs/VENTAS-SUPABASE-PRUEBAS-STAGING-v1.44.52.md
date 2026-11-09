@@ -46,6 +46,8 @@ Crear localmente un JSON que no se suba al repositorio. Ejemplo de estructura (r
   "rollbackCase": {
     "empresaId": 1,
     "sucursalId": 1,
+    "tipoComprobante": "03",
+    "serie": "B001",
     "stock": { "productId": 10 },
     "payload": {
       "tipo": "03",
