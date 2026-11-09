@@ -79,3 +79,36 @@ No activar ni aplicar las migraciones 002/003. No usar el fallback de lote hist�
 4. Recién después, habilitar la restitución de lotes de la devolución y probar el circuito completo en un entorno de pruebas aislado.
 
 La inspección fue de solo lectura. No se aplicó SQL, no se escribieron datos y producción permanece intacta.
+
+## Siguiente bloque — recepción de compras: contrato y bloqueo remoto comprobados
+
+Inspección adicional de solo lectura en producción:
+
+- El frontend llama a `POST /api/edge/purchases/receive`; el Edge deriva a `public.pos_compra_recibir_auth(jsonb)`.
+- La ruta Edge transmite el payload autenticado y responde con error explícito si la RPC no existe.
+- La búsqueda de funciones públicas `%compra%` y `%orden%` en POS AYNI PERÚ no devolvió funciones. Por tanto, la RPC `pos_compra_recibir_auth` que espera el frontend no está instalada en producción.
+- Las tablas de compras sí existen: `compra`, `compra_linea`, `compra_pago`, `proveedor`. `compra.id` y `compra_linea.id` son bigint; empresa, sucursal, proveedor y producto son integer.
+- `compra_linea` actualmente registra cantidad, costo unitario, IGV, subtotales y snapshots de stock/costo promedio, pero no tiene aún `variante_id`, código de lote ni fecha de vencimiento. Esas columnas solo están preparadas por la migración preview 002.
+- `producto_stock` dispone de costo promedio; `producto_variante_stock` todavía no tiene `producto_id` ni `costo_promedio` en producción. La migración preview 002 los prepara y backfillea.
+- El modelo de caja permite asociar movimientos con `compra_id bigint`; `compra_pago` también tiene clave de idempotencia.
+
+### Contrato que debe cumplir la futura RPC de recepción
+
+La RPC nueva debe ejecutar en una sola transacción:
+
+1. Derivar usuario, empresa y rol desde `auth.uid()`; verificar sucursal, proveedor y permisos.
+2. Validar clave idempotente y hash completo del payload. Reintentos idénticos devuelven la compra ya creada; reutilizar clave con datos distintos falla.
+3. Validar cada línea: producto o variante perteneciente a empresa, cantidad/unidades por empaque, costo, tipo IGV, lote y vencimiento opcional.
+4. Convertir empaques a unidades base de forma determinista; almacenar en `compra_linea` tanto la unidad de compra como el factor y la cantidad equivalente.
+5. Crear una fila de `inventario_lote` por línea recibida, vinculada a `compra_id` y `compra_linea_id`, con código de lote, vencimiento, cantidad y costo unitario por unidad base.
+6. Incrementar stock base o stock de variante exactamente una vez y registrar movimiento de inventario; actualizar costo promedio ponderado sin confundir costo por empaque con costo por unidad.
+7. Registrar compra, pagos, cuenta por pagar y movimiento de caja de forma atómica; no duplicar salidas/entradas en los resúmenes de caja.
+8. En recepción parcial de orden, crear lotes por cada recepción/línea recibida, no un lote ficticio por el total pedido; conservar saldo pendiente de orden.
+9. Rechazar cantidades/costos inválidos, lotes vencidos si la política lo prohíbe, mezcla de empresa/sucursal y pagos que no cuadren con el total.
+10. Restringir EXECUTE a `authenticated`; revocar PUBLIC/anon y usar `SECURITY DEFINER` con `search_path` fijo.
+
+### Estado de implementación
+
+Este bloque queda en **diseño técnico respaldado por esquema real**, no implementado ni probado. No se debe habilitar el formulario Supabase de recepción hasta que la RPC exista en el entorno de pruebas y se prueben compra contado/crédito, variante, empaque, lote, vencimiento, reintento y recepción parcial.
+
+La inspección no ejecutó escrituras ni cambios de esquema en POS AYNI PERÚ.
