@@ -26,6 +26,11 @@ export async function supabaseAuthLogout(accessToken: string): Promise<void> {
 export async function supabaseAuthRecover(email: string): Promise<void> {
   await axios.post(`${EDGE}/auth/recover`, { email: email.trim().toLowerCase(), redirect_to: `${window.location.origin}/reset-password` }, { timeout: 15000 });
 }
-export async function supabaseAuthVerifyRecovery(tokenHash: string): Promise<string> {\n  const response = await axios.post(`${EDGE}/auth/recovery/verify`, { token_hash: tokenHash }, { timeout: 15000 });\n  if (!response.data?.access_token) throw new Error('Supabase no devolvió una sesión de recuperación válida.');\n  return response.data.access_token;\n}\nexport async function supabaseAuthSetPassword(accessToken: string, password: string): Promise<void> {
+export async function supabaseAuthVerifyRecovery(tokenHash: string): Promise<string> {
+  const response = await axios.post(`${EDGE}/auth/recovery/verify`, { token_hash: tokenHash }, { timeout: 15000 });
+  if (!response.data?.access_token) throw new Error('Supabase no devolvió una sesión de recuperación válida.');
+  return response.data.access_token;
+}
+export async function supabaseAuthSetPassword(accessToken: string, password: string): Promise<void> {
   await axios.post(`${EDGE}/auth/password`, { password }, { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 15000 });
 }
