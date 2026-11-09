@@ -715,6 +715,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'PURCHASE_ORDERS_MIGRATION_REQUIRED', message: 'Las órdenes de compra aún no están instaladas en staging; no se modificó la orden.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'PURCHASE_ORDERS_FORBIDDEN' }, 403);
+      if (action === 'receive') return stockMovementRpcResponse(response, result);
       return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
     } catch { return json({ error: 'PURCHASE_ORDERS_UNAVAILABLE', message: 'No se pudo contactar con Supabase.' }, 502); }
   }
