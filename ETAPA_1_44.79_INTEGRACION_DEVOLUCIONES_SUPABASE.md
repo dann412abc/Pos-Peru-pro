@@ -35,6 +35,15 @@ En el proyecto Supabase `POS AYNI PERÚ`:
 - El esquema remoto también carece de `producto_id` y `costo_promedio` en `producto_variante_stock`, aunque las RPC de compras/FEFO los consultan. La migración prepara esos campos y valida el backfill.
 - No se crean lotes históricos con vencimiento inventado: los lotes de apertura quedan sin fecha y sin procedencia histórica.
 
+## Integración de registro con trazabilidad FEFO preparada
+- Se creó `202611090003_returns_register_fefo_auth.sql`: RPC `pos_devolucion_registrar_auth(integer,jsonb)`, autenticada y restringida a ADMIN.
+- La nueva RPC reutiliza `pos_registrar_devolucion` para mantener la lógica existente de idempotencia, cálculo de devolución, pagos, caja, crédito y reposición del stock base/variante.
+- En la misma transacción, completa `variante_id` de la línea devuelta y repone cantidades a los lotes consumidos en la venta, limitando lo ya restituido por otras devoluciones.
+- Para ventas históricas sin asignaciones de lote crea un lote `DEVCLIENTE-*` sin inventar fecha ni procedencia. Si existe trazabilidad original incompleta, aborta toda la operación para no dejar stock y lotes desbalanceados.
+- El endpoint Cloudflare `returns/register` ahora invoca la RPC autenticada nueva con `{p_comprobante_id,p_payload}`.
+- Se actualizaron las pruebas de contrato del endpoint y del cliente; también se corrigió la búsqueda de comprobantes para incluir `NV`.
+- La ejecución de estas pruebas aún está pendiente; este repositorio no tiene workflows CI configurados para esta rama.
+
 ## Pendientes que bloquean la activación final
 1. Aplicar la migración de lecturas solo en un entorno de staging, después de revisar el SQL.
 2. Ejecutar pruebas reales con usuario ADMIN de staging: historial, búsqueda, disponibilidad, devolución parcial y total, efectivo, Yape/Plin, crédito, reintento idempotente y dos solicitudes concurrentes.
