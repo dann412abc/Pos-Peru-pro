@@ -38,3 +38,11 @@ test('fully reversed receivable also synchronizes the original receipt state',()
  assert.match(sql,/UPDATE public\.comprobante SET estado='PAGADA'/);
  assert.match(sql,/v_cuenta\.saldo_pendiente-v_credito<=0/);
 });
+
+test('returns writer fails fast when identity helpers or required schema columns are missing',()=>{
+ assert.match(sql,/RETURNS_AUTH_PREREQUISITES_MISSING/);
+ assert.match(sql,/RETURNS_SCHEMA_MISMATCH/);
+ for(const marker of ['mi_usuario_id','mi_empresa_id','mi_rol','mi_puede_ver_sucursal',
+   'producto_stock','producto_variante_stock','updated_at','monto_revertido','devolucion_venta_linea'])
+  assert.ok(sql.includes(marker),marker);
+});
