@@ -13,18 +13,32 @@ export default function ResetPassword() {
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
-    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const query = new URLSearchParams(window.location.search);
-    const token = hash.get('access_token') || query.get('access_token');
-    const type = hash.get('type') || query.get('type');
-    const error = hash.get('error_description') || query.get('error_description');
-    if (error) toast.error(decodeURIComponent(error.replace(/\+/g, ' ')));
-    if (token && type === 'recovery') {
-      setAccessToken(token);
-      // Retira el token de la barra de direcciones después de conservarlo en memoria.
+    let activo = true;
+    async function validarEnlace() {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const query = new URLSearchParams(window.location.search);
+      const token = hash.get('access_token') || query.get('access_token');
+      const type = hash.get('type') || query.get('type');
+      const tokenHash = query.get('token_hash') || hash.get('token_hash');
+      const error = hash.get('error_description') || query.get('error_description');
+      if (error) toast.error(error.replace(/\+/g, ' '));
+      if (token && type === 'recovery') {
+        if (activo) setAccessToken(token);
+      } else if (tokenHash && (query.get('type') === 'recovery' || hash.get('type') === 'recovery')) {
+        try {
+          const sessionToken = await supabaseAuthVerifyRecovery(tokenHash);
+          if (activo) setAccessToken(sessionToken);
+        } catch (err: any) {
+          toast.error(err?.response?.data?.message || err?.message || 'El enlace venció o ya fue utilizado. Solicita uno nuevo.');
+        }
+      } else {
+        toast.error('El enlace no contiene un token de recuperación válido.');
+      }
       window.history.replaceState({}, document.title, window.location.pathname);
+      if (activo) setValidando(false);
     }
-    setValidando(false);
+    void validarEnlace();
+    return () => { activo = false; };
   }, []);
 
   async function guardar(e: FormEvent) {
