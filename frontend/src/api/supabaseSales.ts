@@ -164,7 +164,7 @@ export async function crearVentaSupabase(payload: SupabaseSalePayload): Promise<
         throw new Error('La consulta de recuperación aún no está instalada en Supabase. Conserva el carrito y reintenta con la misma clave.');
       }
     }
-    if (error instanceof Error && !error.isAxiosError && !error.response) throw error;
+    if (error instanceof Error && !('isAxiosError' in error) && !('response' in error)) throw error;
     throw new Error('No se pudo confirmar el resultado del cobro. La consulta no encontró un comprobante confirmado; la solicitud podría seguir en curso. Conserva el carrito y reintenta con la misma clave.');
   }
 }
