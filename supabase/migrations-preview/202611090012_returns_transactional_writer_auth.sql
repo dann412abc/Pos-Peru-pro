@@ -229,9 +229,9 @@ BEGIN
     v_reingresar:=coalesce((v_item->>'reingresarStock')::boolean,true);
     SELECT cl.producto_id,cl.variante_id INTO v_original
     FROM public.comprobante_linea cl WHERE cl.id=v_linea_id AND cl.comprobante_id=p_comprobante_id;
-    SELECT round(least(greatest(0,cl.subtotal-coalesce(sum(dl.monto),0)),
-      CASE WHEN abs(v_cantidad-(cl.cantidad-coalesce(sum(dl.cantidad),0)))<0.0001
-        THEN cl.subtotal-coalesce(sum(dl.monto),0)
+    SELECT round(least(greatest(0,cl.subtotal-coalesce(sum(dl.monto) FILTER (WHERE d.id IS NOT NULL),0)),
+      CASE WHEN abs(v_cantidad-(cl.cantidad-coalesce(sum(dl.cantidad) FILTER (WHERE d.id IS NOT NULL),0)))<0.0001
+        THEN cl.subtotal-coalesce(sum(dl.monto) FILTER (WHERE d.id IS NOT NULL),0)
         ELSE round(cl.subtotal*v_cantidad/cl.cantidad,2) END),2)
     INTO v_importe
     FROM public.comprobante_linea cl
