@@ -227,6 +227,7 @@ export async function onRequest({ request, env, params }) {
         !Number.isSafeInteger(Number(payload.sucursalId)) || Number(payload.sucursalId) <= 0 ||
         typeof payload.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(payload.idempotencyKey) ||
         !Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 200 || !payload.lineas.every(validLine) ||
+        new Set(payload.lineas.map(line => `${line.productoId}:${line.varianteId ?? 'base'}`)).size !== payload.lineas.length ||
         !Array.isArray(payload.pagos) || payload.pagos.length > 20 || !payload.pagos.every(validPayment)) {
       return json({ error: 'INVALID_SALES_IDEMPOTENCY_QUERY', message: 'Verifica sucursal, clave, productos, cantidades, precios, descuentos y pagos.' }, 400);
     }
@@ -463,7 +464,7 @@ export async function onRequest({ request, env, params }) {
       (line.varianteId == null || (Number.isSafeInteger(line.varianteId) && line.varianteId > 0)) &&
       validPositive(line.cantidad) && typeof line.unidadCompra === 'string' && line.unidadCompra.trim().length > 0 &&
       validPositive(line.unidadesPorEmpaque) && validPositive(line.costoEmpaque) &&
-      validPositive(line.costoUnitario) && Number.isInteger(line.tipoIgv) && line.tipoIgv >= 0 &&
+      validPositive(line.costoUnitario) && [10, 20, 30].includes(line.tipoIgv) &&
       (line.codigoLote == null || (typeof line.codigoLote === 'string' && line.codigoLote.length <= 80)) &&
       (line.fechaVencimiento == null || (typeof line.fechaVencimiento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(line.fechaVencimiento)));
     const validMethods = new Set(['EFECTIVO','YAPE','PLIN','TARJETA','TRANSFERENCIA']);
