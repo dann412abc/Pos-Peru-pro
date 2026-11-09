@@ -21,9 +21,11 @@ test('return read RPCs expose history and receipt search without write statement
   assert.doesNotMatch(sql,/\b(INSERT|UPDATE|DELETE|TRUNCATE)\s+public\./i);
 });
 
-test('Cloudflare availability route uses the deployed RPC name',()=>{
-  assert.match(edge,/pos_disponibilidad_devolucion/);
-  assert.doesNotMatch(edge,/pos_devolucion_disponibilidad_auth/);
+test('Cloudflare availability route calls the exact authenticated RPC exposed by SQL',()=>{
+  assert.match(sql,/CREATE OR REPLACE FUNCTION public\.pos_devolucion_disponibilidad_auth\(p_comprobante_id integer\)/);
+  assert.match(edge,/rpc = 'pos_devolucion_disponibilidad_auth'/);
+  assert.match(edge,/args = \{ p_comprobante_id: comprobanteId \}/);
+  assert.doesNotMatch(edge,/pos_disponibilidad_devolucion/);
 });
 
 test('returns page uses Supabase reads and transactional write instead of legacy API in Auth mode',()=>{
