@@ -89,6 +89,29 @@ describe('VentasService.anular - contrato de seguridad', () => {
     expect(method).toContain('comprobanteId: c.id');
   });
 
+  it('reembolsa cada medio original y excluye crédito de las salidas de caja', () => {
+    expect(method).toContain("const medios = c.pagos?.length");
+    expect(method).toContain('const pagosReembolsables = medios.filter((pago) => pago.metodoPago !== MetodoPagoEnum.CREDITO)');
+    expect(method).toContain('for (const pago of pagosReembolsables)');
+    expect(method).toContain('metodoPago: pago.metodoPago');
+    expect(method).toContain('monto: Number(pago.monto)');
+    expect(method).toContain("tipo: 'SALIDA'");
+  });
+
+  it('calcula disponibilidad de caja solo con efectivo y sus movimientos', () => {
+    expect(method).toContain("pago.metodoPago === MetodoPagoEnum.EFECTIVO");
+    expect(method).toContain("cp.metodo_pago = 'EFECTIVO'");
+    expect(method).toContain("x.metodo_pago = 'EFECTIVO'");
+    expect(method).toContain("metodo_pago = 'EFECTIVO'");
+    expect(method).toContain('reembolsoEfectivo > disponible');
+  });
+
+  it('no confunde comprobantes con pagos mixtos con un único método de pago', () => {
+    expect(method).toContain("c.pagos?.length");
+    expect(method).toContain("c.metodoPago, monto: c.total");
+    expect(method).toContain("const pagosReembolsables = medios.filter");
+  });
+
   it('marca el comprobante anulado solo al final del flujo transaccional', () => {
     const marca = method.indexOf('c.estado = EstadoComprobanteEnum.ANULADA');
     const stock = method.indexOf('UPDATE producto_stock SET stock=stock+$1');
