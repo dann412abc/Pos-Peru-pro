@@ -68,7 +68,8 @@ SET search_path=pg_catalog,public,auth
 AS $fn$
 DECLARE v_auth uuid:=auth.uid(); v_usuario integer; v_empresa integer; v_caja public.caja%ROWTYPE;
  v_efectivo numeric(12,2); v_tarjeta numeric(12,2); v_yape numeric(12,2); v_plin numeric(12,2); v_credito numeric(12,2);
- v_mov_efectivo numeric(12,2); v_mov_tarjeta numeric(12,2); v_mov_yape numeric(12,2); v_mov_plin numeric(12,2);\n v_dev_efectivo numeric(12,2); v_dev_tarjeta numeric(12,2); v_dev_yape numeric(12,2); v_dev_plin numeric(12,2); v_esperado numeric(12,2); v_diferencia numeric(12,2); v_esperado_metodos jsonb;
+ v_mov_efectivo numeric(12,2); v_mov_tarjeta numeric(12,2); v_mov_yape numeric(12,2); v_mov_plin numeric(12,2);
+ v_dev_efectivo numeric(12,2); v_dev_tarjeta numeric(12,2); v_dev_yape numeric(12,2); v_dev_plin numeric(12,2); v_esperado numeric(12,2); v_diferencia numeric(12,2); v_esperado_metodos jsonb;
  v_linea jsonb; v_metodo text; v_contado numeric(12,2); v_arqueo_final jsonb:='[]'::jsonb;
 BEGIN
  IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
