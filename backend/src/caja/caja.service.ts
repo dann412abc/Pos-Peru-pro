@@ -192,11 +192,24 @@ export class CajaService {
 
       if (dto.tipo === 'SALIDA' && dto.metodoPago === MetodoPagoEnum.EFECTIVO) {
         const caja = await manager.getRepository(Caja).findOne({ where: { id: cajaId, usuarioId } });
+        // Incluye pagos detallados y comprobantes antiguos sin desglose.
+        // No se filtra por estado: una venta anulada también ingresó efectivo físico;
+        // su reembolso se descuenta mediante el movimiento SALIDA correspondiente.
         const ventas = await manager.query(
-          `SELECT COALESCE(SUM(cp.monto), 0)::numeric AS total
-           FROM comprobante_pago cp
-           INNER JOIN comprobante c ON c.id = cp.comprobante_id
-           WHERE c.caja_id = $1 AND cp.metodo_pago = 'EFECTIVO'`,
+          `SELECT COALESCE(SUM(monto), 0)::numeric AS total FROM (
+             SELECT cp.monto
+             FROM comprobante_pago cp
+             INNER JOIN comprobante c ON c.id = cp.comprobante_id
+             WHERE c.caja_id = $1 AND cp.metodo_pago = 'EFECTIVO'
+             UNION ALL
+             SELECT c.total AS monto
+             FROM comprobante c
+             WHERE c.caja_id = $1
+               AND c.metodo_pago = 'EFECTIVO'
+               AND NOT EXISTS (
+                 SELECT 1 FROM comprobante_pago cp WHERE cp.comprobante_id = c.id
+               )
+           ) efectivo`,
           [cajaId],
         );
         const movimientos = await manager.query(
