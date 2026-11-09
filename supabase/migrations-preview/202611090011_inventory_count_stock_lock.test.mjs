@@ -11,7 +11,7 @@ test('physical count lock migration is preview-only and checks prerequisites', (
 });
 
 test('stock writes for base products and variants share a company-branch transaction lock', () => {
-  assert.match(migration, /pos:inventory-count:/);
+  assert.match(migration, /LOCK TABLE public\\.producto_stock,public\\.producto_variante_stock IN SHARE ROW EXCLUSIVE MODE/);
   assert.match(migration, /trg_inventario_conteo_bloquear_producto_stock/);
   assert.match(migration, /trg_inventario_conteo_bloquear_variante_stock/);
   assert.match(migration, /BEFORE INSERT OR UPDATE OF stock OR DELETE/);
