@@ -46,7 +46,7 @@ BEGIN
  OR NOT EXISTS(SELECT 1 FROM public.proveedor p WHERE p.id=supplier_id AND p.empresa_id=company_id AND p.activo) THEN
   RAISE EXCEPTION 'PURCHASE_SCOPE_INVALID' USING ERRCODE='42501';
  END IF;
- IF doc_type NOT IN ('01','03','NV','OT') OR doc_series='' OR doc_number=''
+ IF doc_type IS NULL OR doc_type NOT IN ('01','03','NV','OT') OR doc_series='' OR length(doc_series)>12 OR doc_number='' OR length(doc_number)>30
  OR (doc_type IN ('01','03') AND (doc_series='' OR doc_number='')) THEN
   RAISE EXCEPTION 'PURCHASE_DOCUMENT_INVALID' USING ERRCODE='22023';
  END IF;
@@ -82,9 +82,9 @@ BEGIN
 
  -- Cashbox lock precedes inventory locks to match the legacy sales lock order.
  FOR payment IN SELECT value FROM jsonb_array_elements(COALESCE(p_payload->'pagos','[]'::jsonb)) LOOP
-  IF payment->>'metodoPago' NOT IN ('EFECTIVO','TARJETA','YAPE','PLIN','TRANSFERENCIA') THEN RAISE EXCEPTION 'PURCHASE_PAYMENT_METHOD_INVALID' USING ERRCODE='22023'; END IF;
+  IF payment->>'metodoPago' IS NULL OR payment->>'metodoPago' NOT IN ('EFECTIVO','TARJETA','YAPE','PLIN','TRANSFERENCIA') THEN RAISE EXCEPTION 'PURCHASE_PAYMENT_METHOD_INVALID' USING ERRCODE='22023'; END IF;
   paid:=round((payment->>'monto')::numeric,2);
-  IF paid<=0 THEN RAISE EXCEPTION 'PURCHASE_PAYMENT_AMOUNT_INVALID' USING ERRCODE='22023'; END IF;
+  IF paid<=0 OR length(COALESCE(payment->>'referencia',''))>120 THEN RAISE EXCEPTION 'PURCHASE_PAYMENT_AMOUNT_OR_REFERENCE_INVALID' USING ERRCODE='22023'; END IF;
   cash_id:=NULLIF(payment->>'cajaId','')::integer;
   IF payment->>'metodoPago'='TRANSFERENCIA' AND cash_id IS NOT NULL THEN RAISE EXCEPTION 'PURCHASE_TRANSFER_WITH_CASHBOX' USING ERRCODE='22023'; END IF;
   IF payment->>'metodoPago'<>'TRANSFERENCIA' AND cash_id IS NULL THEN RAISE EXCEPTION 'PURCHASE_CASHBOX_REQUIRED' USING ERRCODE='22023'; END IF;
@@ -109,7 +109,9 @@ BEGIN
   product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::bigint;
   packs:=(line->>'cantidad')::numeric; units_per_pack:=COALESCE(NULLIF(line->>'unidadesPorEmpaque','')::numeric,1);
   pack_cost:=COALESCE(NULLIF(line->>'costoEmpaque','')::numeric,(line->>'costoUnitario')::numeric*units_per_pack);
-  IF packs<=0 OR packs>999999 OR units_per_pack<=0 OR units_per_pack>999999 OR pack_cost<=0 OR pack_cost>99999999 THEN
+  IF packs<=0 OR packs>999999 OR units_per_pack<=0 OR units_per_pack>999999 OR pack_cost<=0 OR pack_cost>99999999
+  OR (line->>'tipoIgv') IS NULL OR (line->>'tipoIgv')::integer NOT IN (10,20,30)
+  OR length(COALESCE(line->>'codigoLote',''))>80 THEN
    RAISE EXCEPTION 'PURCHASE_PACK_INVALID' USING ERRCODE='22023';
   END IF;
   qty:=round(packs*units_per_pack,3); unit_cost:=round(pack_cost/units_per_pack,4);
@@ -123,7 +125,7 @@ BEGIN
   END IF;
   IF variant_id IS NOT NULL THEN
    SELECT pv.id,pv.producto_id,pv.nombre,pv.codigo INTO variant_row FROM public.producto_variante pv
-   WHERE pv.id=variant_id AND pv.empresa_id=company_id AND pv.producto_id=product_id AND pv.activo;
+   WHERE pv.id=variant_id AND pv.empresa_id=company_id AND pv.producto_id=product_id AND pv.activo FOR UPDATE;
    IF NOT FOUND THEN RAISE EXCEPTION 'PURCHASE_VARIANT_INVALID' USING ERRCODE='22023'; END IF;
    SELECT vs.stock,vs.costo_promedio INTO stock_before,avg_before FROM public.producto_variante_stock vs
    WHERE vs.variante_id=variant_id AND vs.producto_id=product_id AND vs.empresa_id=company_id AND vs.sucursal_id=branch_id FOR UPDATE;
