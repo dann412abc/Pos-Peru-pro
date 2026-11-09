@@ -64,7 +64,7 @@ BEGIN
   v_usuario:=public.mi_usuario_id();
   v_empresa:=public.mi_empresa_id();
   IF v_usuario IS NULL OR v_empresa IS NULL
-     OR public.mi_rol() NOT IN ('ADMIN','CAJERO') THEN
+     OR COALESCE(public.mi_rol(),'') NOT IN ('ADMIN','CAJERO') THEN
     RAISE EXCEPTION 'SALE_FORBIDDEN' USING ERRCODE='42501';
   END IF;
   IF p_venta IS NULL OR jsonb_typeof(p_venta) IS DISTINCT FROM 'object' THEN
