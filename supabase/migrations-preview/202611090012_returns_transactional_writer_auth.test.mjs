@@ -28,3 +28,8 @@ test('FEFO wrapper restores original sale lots after transactional stock and cas
  assert.match(fefo,/comprobante_linea_id=v_linea_id/);
  assert.match(fefo,/devolucion_venta_lote/);
 });
+
+test('partial return value calculation only aggregates already-registered returns',()=>{
+ assert.match(sql,/sum\(dl\.monto\) FILTER \(WHERE d\.id IS NOT NULL\)/);
+ assert.match(sql,/sum\(dl\.cantidad\) FILTER \(WHERE d\.id IS NOT NULL\)/);
+});
