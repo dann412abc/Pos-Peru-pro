@@ -3,6 +3,21 @@
 -- No aplicar en producción. Ejecutar primero en una copia de staging.
 BEGIN;
 
+-- La tabla de cabecera no existía en el esquema Supabase singular; crearla con el contrato usado por kardex.
+CREATE TABLE IF NOT EXISTS public.transferencia_inventario (
+  id serial PRIMARY KEY,
+  empresa_id integer NOT NULL,
+  sucursal_origen_id integer NOT NULL,
+  sucursal_destino_id integer NOT NULL,
+  usuario_id integer NOT NULL,
+  motivo varchar(200) NOT NULL,
+  idempotency_key varchar(100),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_transferencia_sucursales_distintas CHECK (sucursal_origen_id <> sucursal_destino_id)
+);
+CREATE INDEX IF NOT EXISTS ix_transferencia_empresa_fecha
+  ON public.transferencia_inventario(empresa_id,created_at DESC);
+
 DO $guard$
 BEGIN
   IF to_regclass('public.inventario_lote') IS NULL
