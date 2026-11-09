@@ -704,6 +704,37 @@ export async function onRequest({ request, env, params }) {
     } catch { return json({ error: 'CATALOG_UNAVAILABLE' }, 502); }
   }
 
+  // Registro de venta con consumo FEFO atómico; evita llamar directamente a la RPC sin lotes.
+  if (request.method === 'POST' && route === 'sales/register') {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+    const payload = body?.payload;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
+        !Number.isSafeInteger(Number(payload.sucursalId)) || Number(payload.sucursalId) <= 0 ||
+        typeof payload.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,100}$/.test(payload.idempotencyKey) ||
+        !Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 200 ||
+        !Array.isArray(payload.pagos) || payload.pagos.length < 1 || payload.pagos.length > 5) {
+      return json({ error: 'INVALID_SALE_PAYLOAD', message: 'Verifica sucursal, clave de operación, líneas y pagos.' }, 400);
+    }
+    const encoded = JSON.stringify({ p_venta: payload });
+    if (encoded.length > 64000) return json({ error: 'SALE_PAYLOAD_TOO_LARGE' }, 413);
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_registrar_venta_fefo_auth', supabase), {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: encoded,
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'SALE_FEFO_MIGRATION_REQUIRED', message: 'La venta con control FEFO no está instalada en el entorno de pruebas; no se registró la venta.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'SALE_FORBIDDEN', message: 'La sesión no tiene autorización para registrar esta venta.' }, 403);
+      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+    } catch {
+      return json({ error: 'SALE_REGISTER_UNAVAILABLE', message: 'No se pudo confirmar la venta en Supabase. Conserva la misma clave para reintentar.' }, 502);
+    }
+  }
+
   // Registro transaccional de devolución de venta. La RPC deriva usuario/empresa desde auth.uid().
   if (request.method === 'POST' && route === 'returns/register') {
     const token = getBearer(request);
