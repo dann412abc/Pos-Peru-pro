@@ -48,7 +48,7 @@ export class DevolucionesService {
               nc.id AS "notaCreditoId", nc.serie AS "notaCreditoSerie", nc.correlativo AS "notaCreditoCorrelativo"
        FROM devolucion_venta d
        INNER JOIN comprobante c ON c.id=d.comprobante_id AND c.empresa_id=d.empresa_id
-       INNER JOIN cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
+       LEFT JOIN cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
        INNER JOIN usuario u ON u.id=d.usuario_id AND u.empresa_id=d.empresa_id
        LEFT JOIN comprobante nc ON nc.devolucion_venta_id=d.id AND nc.empresa_id=d.empresa_id AND nc.tipo='07'
        WHERE d.empresa_id=$1 AND d.sucursal_id=ANY($2::int[])
@@ -86,7 +86,7 @@ export class DevolucionesService {
     const comprobantes = await this.dataSource.query(
       `SELECT c.id,c.sucursal_id AS "sucursalId",c.cliente_id AS "clienteId",c.tipo,c.serie,
               c.correlativo,c.total,c.estado,c.fecha_emision AS "fechaEmision",cl.nombre AS "clienteNombre"
-       FROM comprobante c INNER JOIN cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
+       FROM comprobante c LEFT JOIN cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
        WHERE c.id=$1 AND c.empresa_id=$2 AND c.sucursal_id=ANY($3::int[])`, [comprobanteId, empresaId, ids],
     );
     if (!comprobantes.length) throw new NotFoundException('Comprobante no encontrado');
@@ -359,15 +359,20 @@ export class DevolucionesService {
            WHERE comprobante_id=$1 AND empresa_id=$2 AND sucursal_id=$3 FOR UPDATE`,
           [comprobanteId, empresaId, venta.sucursal_id],
         );
-        const clienteBloqueado = await manager.query(
-          `SELECT id FROM cliente WHERE id=$1 AND empresa_id=$2 FOR UPDATE`, [venta.cliente_id, empresaId],
-        );
-        if (!clienteBloqueado.length) throw new NotFoundException('Cliente de la venta no encontrado');
+        if (venta.cliente_id !== null && venta.cliente_id !== undefined) {
+          const clienteBloqueado = await manager.query(
+            `SELECT id FROM cliente WHERE id=$1 AND empresa_id=$2 FOR UPDATE`, [venta.cliente_id, empresaId],
+          );
+          if (!clienteBloqueado.length) throw new NotFoundException('Cliente de la venta no encontrado');
+        }
         const pagosOriginales = await manager.query(
           `SELECT metodo_pago AS metodo,monto FROM comprobante_pago WHERE comprobante_id=$1`, [comprobanteId],
         );
         const creditoOriginal = money(pagosOriginales.filter((p: any) => p.metodo === 'CREDITO')
           .reduce((sum: number, p: any) => sum + Number(p.monto), 0));
+        if (creditoOriginal > 0 && venta.cliente_id == null) {
+          throw new ConflictException('La venta tiene crédito pero no tiene cliente asociado. Corrija el comprobante antes de devolver.');
+        }
         if (!cuentas.length && creditoOriginal > 0) {
           throw new ConflictException('La venta contiene crédito pero no tiene cuenta por cobrar asociada. Revise la migración antes de devolver.');
         }
@@ -521,10 +526,12 @@ export class DevolucionesService {
             `UPDATE cuenta_cobrar SET saldo_pendiente=$1,monto_revertido=monto_revertido+$2,estado=$3,updated_at=NOW()
              WHERE id=$4 AND empresa_id=$5`, [nuevoSaldo, creditoRevertido, nuevoEstado, cuentas[0].id, empresaId],
           );
-          await manager.query(
-            `UPDATE cliente SET saldo_credito=GREATEST(0,saldo_credito-$1) WHERE id=$2 AND empresa_id=$3`,
-            [creditoRevertido, venta.cliente_id, empresaId],
-          );
+          if (venta.cliente_id != null) {
+            await manager.query(
+              `UPDATE cliente SET saldo_credito=GREATEST(0,saldo_credito-$1) WHERE id=$2 AND empresa_id=$3`,
+              [creditoRevertido, venta.cliente_id, empresaId],
+            );
+          }
           if (nuevoSaldo <= 0) {
             await manager.query(`UPDATE comprobante SET estado='PAGADA' WHERE id=$1 AND empresa_id=$2 AND estado='PENDIENTE'`, [comprobanteId, empresaId]);
           }
