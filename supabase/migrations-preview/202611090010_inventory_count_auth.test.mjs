@@ -23,7 +23,8 @@ test('physical count RPCs require auth and branch authorization', () => {
     assert.ok(migration.includes(fn));
   }
   assert.match(migration, /public\.mi_puede_ver_sucursal/);
-  assert.match(migration, /public\.mi_rol\(\) IS DISTINCT FROM 'ADMIN'/);\n  assert.equal((migration.match(/public\\.mi_rol\\(\\) IS DISTINCT FROM 'ADMIN'/g) || []).length, 5);
+  assert.match(migration, /public\.mi_rol\(\) IS DISTINCT FROM 'ADMIN'/);
+  assert.equal(migration.split("public.mi_rol() IS DISTINCT FROM 'ADMIN'").length - 1, 5);
 });
 
 test('closing applies each difference through the lot-aware adjustment RPC', () => {
