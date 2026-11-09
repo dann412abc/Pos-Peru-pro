@@ -1,0 +1,50 @@
+name: Validar concurrencia de devoluciones en PostgreSQL aislado
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/tests/returns-postgres/**'
+      - '.github/workflows/validate-returns-postgres.yml'
+  push:
+    branches: [fix/cloudflare-pages-types-1.44.78]
+    paths:
+      - 'supabase/tests/returns-postgres/**'
+      - '.github/workflows/validate-returns-postgres.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  returns-concurrency:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: returns_concurrency_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d returns_concurrency_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependencia PostgreSQL
+        run: npm install --no-save pg@8.11.3
+      - name: Ejecutar pruebas transaccionales concurrentes
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: returns_concurrency_test
+        run: node --test supabase/tests/returns-postgres/concurrency.integration.test.mjs
