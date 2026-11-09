@@ -471,7 +471,7 @@ export async function onRequest({ request, env, params }) {
     const validPayment = (payment) => payment && typeof payment === 'object' && !Array.isArray(payment) &&
       validMethods.has(payment.metodoPago) && validPositive(payment.monto) &&
       (payment.cajaId == null || (Number.isSafeInteger(payment.cajaId) && payment.cajaId > 0)) &&
-      (payment.referencia == null || (typeof payment.referencia === 'string' && payment.referencia.length <= 160));
+      (payment.referencia == null || (typeof payment.referencia === 'string' && payment.referencia.length <= 120));
     if (!Number.isSafeInteger(payload.sucursalId) || payload.sucursalId <= 0 ||
         !Number.isSafeInteger(payload.proveedorId) || payload.proveedorId <= 0 ||
         !['CONTADO','CREDITO'].includes(payload.condicionPago) ||
@@ -482,7 +482,7 @@ export async function onRequest({ request, env, params }) {
         (payload.condicionPago === 'CREDITO' && (typeof payload.fechaVencimiento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.fechaVencimiento) || payload.fechaVencimiento < payload.fechaDocumento)) ||
         typeof payload.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(payload.idempotencyKey) ||
         !Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 200 || !payload.lineas.every(validLine) ||
-        !Array.isArray(payload.pagos) || payload.pagos.length > 20 || !payload.pagos.every(validPayment) ||
+        !Array.isArray(payload.pagos) || payload.pagos.length > 8 || !payload.pagos.every(validPayment) ||
         (payload.condicionPago === 'CREDITO' && payload.pagos.length > 0)) {
       return json({ error: 'INVALID_PURCHASE_PAYLOAD', message: 'Verifica sucursal, proveedor, documento, condición de pago, líneas, cantidades, costos y pagos.' }, 400);
     }
