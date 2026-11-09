@@ -94,7 +94,9 @@ export default function Productos() {
   }
 
   async function recargarTransferencias() {
-    if (ES_MODO_DEMO || (usuario?.sucursales?.length || 0) < 2) {
+    // El historial Supabase se habilitará cuando exista su RPC de lectura autenticada.
+    // Evita consultar el endpoint REST heredado con sesiones Supabase.
+    if (ES_MODO_DEMO || import.meta.env.VITE_AUTH_PROVIDER === 'supabase' || (usuario?.sucursales?.length || 0) < 2) {
       setTransferencias([]);
       return;
     }
