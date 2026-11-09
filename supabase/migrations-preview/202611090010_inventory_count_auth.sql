@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS public.inventario_conteo_linea (
   empresa_id integer NOT NULL,
   sucursal_id integer NOT NULL,
   producto_id integer NOT NULL,
-  variante_id bigint,
+  variante_id integer,
   codigo varchar(80),
   producto_nombre varchar(200) NOT NULL,
   variante_nombre varchar(120),
