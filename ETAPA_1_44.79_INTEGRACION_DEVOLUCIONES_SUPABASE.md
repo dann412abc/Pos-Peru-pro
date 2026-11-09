@@ -112,3 +112,17 @@ La RPC nueva debe ejecutar en una sola transacción:
 Este bloque queda en **diseño técnico respaldado por esquema real**, no implementado ni probado. No se debe habilitar el formulario Supabase de recepción hasta que la RPC exista en el entorno de pruebas y se prueben compra contado/crédito, variante, empaque, lote, vencimiento, reintento y recepción parcial.
 
 La inspección no ejecutó escrituras ni cambios de esquema en POS AYNI PERÚ.
+
+## Avance — validación de entrada de recepción en Cloudflare Edge
+
+Se reforzó la ruta `POST /api/edge/purchases/receive` antes de invocar la RPC:
+
+- Exige IDs enteros positivos de sucursal y proveedor, documento/serie/número/fecha y condición CONTADO o CREDITO.
+- Valida cada línea: producto, variante opcional, cantidad, unidad de compra, unidades por empaque, costo por empaque, costo unitario, tipo IGV, código de lote y formato de vencimiento.
+- Valida métodos de pago permitidos, montos positivos, caja y referencia.
+- Impide pagos iniciales en compras a crédito.
+- Conserva el límite de tamaño del payload y la respuesta explícita cuando falta la RPC.
+
+Se amplió `purchases-receive.test.js` para cubrir líneas incompletas, medios de pago no permitidos y crédito con pagos iniciales. Los tests están escritos, pero **no se han ejecutado** en esta sesión.
+
+Importante: esta validación protege la frontera HTTP; no sustituye las validaciones SQL ni hace funcionar la recepción. La RPC `pos_compra_recibir_auth(jsonb)` sigue ausente en producción y no se creó ni aplicó migración SQL.
