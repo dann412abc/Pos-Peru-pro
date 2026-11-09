@@ -10,7 +10,7 @@ test('physical count lock migration is preview-only and checks prerequisites', (
   assert.match(migration, /INVENTORY_COUNT_LOCK_SCHEMA_INCOMPATIBLE/);
 });
 
-test('stock writes for base products and variants share a company-branch transaction lock', () => {
+test('stock writes for base products and variants are blocked by the open count', () => {
   assert.match(migration, /LOCK TABLE public\\.producto_stock,public\\.producto_variante_stock IN SHARE ROW EXCLUSIVE MODE/);
   assert.match(migration, /trg_inventario_conteo_bloquear_producto_stock/);
   assert.match(migration, /trg_inventario_conteo_bloquear_variante_stock/);
@@ -23,7 +23,7 @@ test('count opening serializes snapshot creation against stock writes', () => {
   assert.match(migration, /BEFORE INSERT ON public\.inventario_conteo/);
 });
 
-test('count close uses a transaction-local count-specific bypass and same branch lock', () => {
+test('count close uses a transaction-local count-specific bypass', () => {
   assert.match(migration, /pos\.inventory_count_close_id/);
   assert.match(migration, /set_config\('pos\.inventory_count_close_id',p_conteo_id::text,true\)/);
   assert.match(migration, /pg_advisory_xact_lock[\s\S]*pos:inventory-count:/);
