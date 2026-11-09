@@ -50,8 +50,7 @@ export interface SupabaseReturnPreflightPayload {
 }
 
 /**
- * Ejecuta únicamente la prevalidación SQL. Nunca registra la devolución.
- * La pantalla de registro permanece protegida hasta que exista el RPC de commit.
+ * Ejecuta únicamente la prevalidación SQL. No registra ni modifica datos.
  */
 export async function preflightSupabaseReturn(
   comprobanteId: number,
@@ -132,8 +131,8 @@ export async function registerSupabaseReturn(
 }
 
 /**
- * Comprueba las tablas y columnas requeridas por la futura devolución transaccional.
- * Es una consulta de diagnóstico: no modifica datos y nunca habilita el registro.
+ * Comprueba las tablas y columnas requeridas por la devolución transaccional.
+ * Es una consulta de diagnóstico: no modifica datos ni habilita el registro por sí sola.
  */
 export async function verifySupabaseReturnsSchema(): Promise<any> {
   const response = await axios.post('/api/edge/rpc/pos_devolucion_esquema_verificar_auth', {}, {
