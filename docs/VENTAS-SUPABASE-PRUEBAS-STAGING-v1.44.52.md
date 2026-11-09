@@ -1,6 +1,6 @@
-# Pruebas de integración de ventas en Supabase staging — v1.44.52
+# Pruebas de integración de ventas en Supabase staging — v1.44.79
 
-Este paquete incorpora un arnés opt-in para probar la RPC `pos_venta_crear_auth` contra una base PostgreSQL/Supabase de staging. No se conecta automáticamente y no se ejecuta durante la suite estática.
+Este paquete incorpora un arnés opt-in para probar la RPC `pos_registrar_venta_fefo_auth` contra una base PostgreSQL/Supabase de staging. No se conecta automáticamente y no se ejecuta durante la suite estática.
 
 ## Seguridad de ejecución
 
@@ -27,7 +27,7 @@ Crear localmente un JSON que no se suba al repositorio. Ejemplo de estructura (r
       "empresaId": 1,
       "sucursalId": 1,
       "stock": { "productId": 10, "delta": 1 },
-      "expected": { "paymentCount": 1, "fefoLotIds": [101] },
+      "expected": { "paymentCount": 1, "fefoLotCodes": ["STG-COMPRA-001"], "lotAvailabilityAfterSale": [{ "code": "STG-COMPRA-001", "available": 9 }] },
       "payload": {
         "tipo": "03",
         "idempotencyKey": "STAGING-CASH-000001",
@@ -60,12 +60,27 @@ Crear localmente un JSON que no se suba al repositorio. Ejemplo de estructura (r
       ],
       "descuentoGlobal": 0
     },
-    "expectedError": "SALE_FEFO_LOTS_INSUFFICIENT_OR_EXPIRED"
+    "expectedError": "SALE_FEFO_STOCK_MISMATCH"
   }
 }
 ```
 
-El ejemplo es ilustrativo, no un fixture válido listo para ejecutar. Los IDs, precios, cantidades, pagos y lotes deben coincidir con datos reales de staging. Para probar crédito, incluir `creditCustomerId`, `expected.creditDelta` y un pago `CREDITO`. Para variantes, usar `stock.variantId`. Para FEFO, incluir `expected.fefoLotIds` en el orden esperado.
+El ejemplo es ilustrativo, no un fixture válido listo para ejecutar. Los IDs, precios, cantidades, pagos y lotes deben coincidir con datos reales de staging. Para probar crédito, incluir `creditCustomerId`, `expected.creditDelta` y un pago `CREDITO`. Para variantes, usar `stock.variantId`. Para FEFO, incluir `expected.fefoLotIds` o `expected.fefoLotCodes` en el orden esperado.
+
+### Flujo integrado compra → lote → venta
+
+Un escenario de `successCases` puede incluir `purchasePrerequisite`. El runner recibirá primero esa compra con `pos_compra_recibir_auth`, comprobará que quedó `RECIBIDA` y que creó sus lotes con disponibilidad completa; luego ejecutará la venta con `pos_registrar_venta_fefo_auth` en la misma transacción y conexión. La venta debe utilizar el mismo producto/variante y sucursal que la compra. Ejemplo de estructura adicional:
+
+```json
+{
+  "purchasePrerequisite": {
+    "payload": { "sucursalId": 1, "proveedorId": 20, "tipoDocumento": "03", "serie": "B001", "numero": "STG-COMPRA-VENTA-01", "fechaDocumento": "2026-11-09", "condicionPago": "CONTADO", "idempotencyKey": "STG-PURCHASE-FLOW-001", "lineas": [{ "productoId": 10, "varianteId": null, "cantidad": 10, "unidadesPorEmpaque": 1, "costoUnitario": 8, "tipoIgv": 10, "codigoLote": "STG-COMPRA-001", "fechaVencimiento": "2027-12-31" }], "pagos": [{ "metodoPago": "TRANSFERENCIA", "monto": 94.40, "referencia": "STG-TRANSFER-01" }] },
+    "expected": { "lotCount": 1, "lotCodes": ["STG-COMPRA-001"] }
+  }
+}
+```
+
+Este bloque se añade dentro de un escenario de venta que comparta `empresaId`, `sucursalId` y `stock.productId=10`; el payload de venta debe vender una cantidad menor o igual a 10. Ajustar el monto del pago a la suma real de la compra y mantener una clave idempotente única. `expected.lotAvailabilityAfterSale` debe reflejar la cantidad que quede del lote después de la venta.
 
 ## Ejecución
 
@@ -88,7 +103,7 @@ POS_SALES_ALLOW_COMMIT_TESTS=YES
 
 La conexión de pruebas debe poder ejecutar `SET LOCAL ROLE authenticated`; se usa ese rol al invocar la RPC y se restaura el rol de conexión para consultar snapshots de verificación sin depender de políticas SELECT del usuario.
 
-La suite verifica comprobante, pagos, suma pagada, stock, asignaciones FEFO, saldo de crédito, ledger de caja, replay idempotente y rollback de un error FEFO. Los escenarios exitosos normales se revierten al final de cada prueba.
+La suite verifica comprobante, pagos, suma pagada, stock, asignaciones FEFO y saldo por lote, saldo de crédito, ledger de caja, replay idempotente y rollback de un error FEFO. Cuando se define `purchasePrerequisite`, también verifica compra recibida y consumo del lote recién creado en la misma transacción. Los escenarios exitosos normales se revierten al final de cada prueba.
 
 ## Límites
 
