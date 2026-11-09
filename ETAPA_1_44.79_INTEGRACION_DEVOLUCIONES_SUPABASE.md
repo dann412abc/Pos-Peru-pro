@@ -169,11 +169,12 @@ La migración 004 y su prueba estática están en la rama de trabajo. No se han 
 
 ## Corrección — índice único de líneas de compra
 
-La revisión del catálogo real de PostgreSQL confirmó que `uq_compra_linea_producto` está creado como **índice único**, no como constraint. Por ello, la instrucción anterior `DROP CONSTRAINT IF EXISTS` no lo eliminaba y el índice nuevo por producto/variante podía coexistir con la regla antigua, bloqueando todavía dos variantes del mismo producto.
+La consulta de catálogo de restricciones de PostgreSQL confirmó que `uq_compra_linea_producto` está creado en producción como **constraint UNIQUE**, respaldada por un índice interno. Intentar `DROP INDEX` primero fallaría porque PostgreSQL no permite eliminar directamente el índice que respalda una constraint.
 
 Corrección preparada en la rama:
-- Se agrega `DROP INDEX IF EXISTS public.uq_compra_linea_producto` antes del nuevo índice compuesto por producto y variante.
-- Se conserva también `DROP CONSTRAINT IF EXISTS` como protección ante instalaciones donde ese objeto sí sea una constraint.
+- Primero se ejecuta `ALTER TABLE ... DROP CONSTRAINT IF EXISTS`; PostgreSQL elimina con ella el índice interno.
+- Después se ejecuta `DROP INDEX IF EXISTS` como limpieza compatible con instalaciones donde exista un índice independiente con ese nombre.
+- Finalmente se crea el índice único compuesto por producto y variante.
 - Se actualiza la prueba estática para exigir la eliminación del índice real.
 
 No se ejecutó la migración ni se modificó Supabase. La corrección queda pendiente de validación automatizada y de aplicación en un entorno aislado.
@@ -191,3 +192,8 @@ Se localizó el motor real de compras en `backend/src/compras/compra-calculation
 - La suite existente cubre un ejemplo gravado (118 → base 100 + IGV 18), exonerado, inafecto, conversión de caja a unidades y costo promedio ponderado.
 
 Por tanto, el bloqueo tributario queda resuelto con una regla concreta y respaldada por el backend legacy. La RPC Supabase puede implementar el mismo algoritmo y redondeos, manteniendo la cantidad/costo unitario en unidades base. Aún falta traducirlo a SQL y contrastar sus columnas con el esquema real; no se considera implementado hasta completar esa integración y probarla.
+
+
+### Ajuste de orden de eliminación del índice/constraint
+
+La consulta posterior de `pg_constraint` precisó el hallazgo: en la producción consultada, el objeto se registra como constraint UNIQUE `uq_compra_linea_producto`. La migración se corrigió para eliminar primero la constraint (y su índice respaldante) y solo después ejecutar `DROP INDEX IF EXISTS`. La prueba ahora verifica el orden de las tres instrucciones. La migración continúa siendo preview-only y no se ha ejecutado.
