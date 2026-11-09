@@ -197,3 +197,25 @@ Por tanto, el bloqueo tributario queda resuelto con una regla concreta y respald
 ### Ajuste de orden de eliminación del índice/constraint
 
 La consulta posterior de `pg_constraint` precisó el hallazgo: en la producción consultada, el objeto se registra como constraint UNIQUE `uq_compra_linea_producto`. La migración se corrigió para eliminar primero la constraint (y su índice respaldante) y solo después ejecutar `DROP INDEX IF EXISTS`. La prueba ahora verifica el orden de las tres instrucciones. La migración continúa siendo preview-only y no se ha ejecutado.
+
+
+## Inspección adicional del contrato real para RPC de recepción
+
+Se contrastó el flujo legacy `ComprasService.crearCompra` con las columnas y constraints de producción:
+
+- El flujo legacy inserta cabecera, líneas, lotes, stock, movimientos y pagos dentro de una transacción. La RPC Supabase debe mantener esa misma atomicidad.
+- La cabecera usa `compra.estado='RECIBIDA'`, `pagado`, `saldo_pendiente`, `op_gravadas`, `op_exoneradas`, `op_inafectas`, `total_igv` y `total`.
+- La línea guarda snapshots de stock/costo anteriores y posteriores. Los IDs de compra/línea son bigint; empresa/sucursal/producto/usuario son integer; variante es bigint.
+- `movimiento_inventario.tipo` solo admite `ENTRADA` o `SALIDA`; la recepción registra `ENTRADA` y enlaza `compra_id`.
+- `compra_pago` admite TRANSFERENCIA; `caja_movimiento` no. Transferencia debe persistirse como pago sin egreso de caja física. EFECTIVO/TARJETA/YAPE/PLIN se vinculan a una caja abierta del usuario/sucursal y generan SALIDA.
+- El legacy valida disponibilidad de efectivo antes de registrar un pago EFECTIVO. La RPC debe hacer la misma comprobación bajo bloqueo de la fila de caja.
+- Los constraints productivos ya limitan tipos de documento de compra a `01`, `03`, `NV`, `OT`; condición a CONTADO/CREDITO; métodos de pago de compra a los cinco permitidos; y tipo IGV de línea a 10/20/30.
+- La constraint productiva `uq_compra_linea_producto` es UNIQUE (compra_id, producto_id). La migración 002 debe quitarla antes de crear el índice por producto/variante. El orden quedó corregido y su prueba estática exige ese orden.
+
+### Incompatibilidad detectada que debe resolverse en la RPC
+
+El servicio legacy consulta `producto.tiene_variantes`, pero la consulta de columnas de la tabla `public.producto` en Supabase producción **no muestra esa columna**. No se debe copiar esa referencia SQL del legacy tal cual. Para esta RPC se debe determinar la presencia de variantes consultando `producto_variante` por producto/empresa (y validar la variante seleccionada), o preparar una migración coordinada si se decide introducir un indicador persistente. La alternativa por existencia evita agregar un campo redundante y es la opción de menor riesgo para la integración actual.
+
+También se confirmó que el catálogo `producto` contiene `tipo_igv`, mientras que `producto_variante` no declara un tipo IGV propio; la validación tributaria debe comparar la línea con `producto.tipo_igv`.
+
+No se implementó todavía la RPC: primero se está cerrando el contrato contra el esquema remoto para evitar una función que compile pero falle al ejecutarse por columnas inexistentes. Todas las consultas fueron de solo lectura.
