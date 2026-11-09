@@ -25,7 +25,7 @@ BEGIN
   IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
   SELECT u.id,u.empresa_id INTO v_usuario,v_empresa
   FROM public.usuario u
-  WHERE u.supabase_auth_user_id=v_auth AND u.activo=true;
+  WHERE u.auth_user_id=v_auth AND u.activo=true;
   IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
 
   SELECT c.sucursal_id,c.saldo_inicial INTO v_sucursal,v_saldo
