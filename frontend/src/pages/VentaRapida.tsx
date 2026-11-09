@@ -11,7 +11,7 @@ import { crearVentaSupabase, consultarEstadoVentaSupabase, consultarDetalleCompr
 import { esProductoActivo } from '../utils/catalogo';
 import { mapComprobante } from '../utils/ventaMapper';
 import { calcularTotales, formatearMoneda, validarDNI, validarRUC, serieSegunTipo, etiquetaTipoIgv } from '../utils/igv';
-import type { Producto, Cliente, LineaVenta, TipoComprobante, MetodoPago, PagoLinea, Venta, ConfigEmpresa } from '../types';
+import type { Producto, Cliente, LineaVenta, TipoComprobante, MetodoPago, PagoLinea, Venta, ConfigEmpresa, Caja } from '../types';
 import { useAuth } from '../context/AuthContext';
 import TicketModal from '../components/TicketModal';
 import BarcodeScanner from '../components/BarcodeScanner';
@@ -32,6 +32,19 @@ function fechaLimaHoy(): string {
   }).formatToParts(new Date());
   const valor = (tipo: string) => partes.find((parte) => parte.type === tipo)?.value || '';
   return `${valor('year')}-${valor('month')}-${valor('day')}`;
+}
+
+function mapCaja(caja: any): Caja {
+  const estado = String(caja?.estado ?? caja?.status ?? 'Abierta').toLowerCase();
+  return {
+    id: Number(caja?.id),
+    fechaApertura: String(caja?.fechaApertura ?? caja?.fecha_apertura ?? new Date().toISOString()),
+    fechaCierre: caja?.fechaCierre ?? caja?.fecha_cierre ?? undefined,
+    saldoInicial: Number(caja?.saldoInicial ?? caja?.saldo_inicial ?? 0),
+    estado: estado === 'abierta' || estado === 'open' || estado === 'abi er ta'.replace(/ /g, '') ? 'Abierta' : 'Cerrada',
+    usuarioId: String(caja?.usuarioId ?? caja?.usuario_id ?? ''),
+    sucursalId: String(caja?.sucursalId ?? caja?.sucursal_id ?? ''),
+  };
 }
 
 function sumarDiasFecha(fecha: string, dias: number): string {
@@ -165,7 +178,7 @@ export default function VentaRapida() {
         enCola: false,
       };
       const existente = await db.ventas.where('idempotencyKey').equals(intento.idempotencyKey).first();
-      if (existente?.id) await db.ventas.update(existente.id, ventaRecuperada);
+      if (existente?.id) await db.ventas.put({ ...ventaRecuperada, id: existente.id });
       else await db.ventas.add(ventaRecuperada);
       limpiarClaveVentaSupabase(storageKey);
       setRecuperacionPendiente(null);
