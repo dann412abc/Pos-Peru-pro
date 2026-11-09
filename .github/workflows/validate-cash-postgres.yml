@@ -1,0 +1,71 @@
+name: Validar migraciones de caja en PostgreSQL aislado
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations-preview/20261107004*.sql'
+      - 'supabase/tests/cash-postgres/**'
+      - '.github/workflows/validate-cash-postgres.yml'
+  push:
+    branches: [fix/cloudflare-pages-types-1.44.78]
+    paths:
+      - 'supabase/migrations-preview/20261107004*.sql'
+      - 'supabase/tests/cash-postgres/**'
+      - '.github/workflows/validate-cash-postgres.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cash_migrations_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cash_migrations_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar PostgreSQL efímero
+        env:
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d cash_migrations_test -f supabase/tests/cash-postgres/schema.sql
+      - name: Ejecutar migraciones 042 a 045 en orden
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for file in \
+            supabase/migrations-preview/202611070042_cash_register_summary_auth.sql \
+            supabase/migrations-preview/202611070043_cash_register_lifecycle_auth.sql \
+            supabase/migrations-preview/202611070044_cash_movements_history_auth.sql \
+            supabase/migrations-preview/202611070045_cash_refund_reconciliation_auth.sql
+          do
+            echo "Aplicando $file en PostgreSQL efímero"
+            psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d cash_migrations_test -f "$file"
+          done
+      - name: Verificar funciones instaladas
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d cash_migrations_test -Atc "
+            SELECT count(*) = 5
+            FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+            WHERE n.nspname='public' AND p.proname IN (
+              'pos_caja_resumen_auth','pos_caja_abrir_auth',
+              'pos_caja_movimiento_auth','pos_caja_cerrar_auth',
+              'pos_caja_movimientos_listar_auth'
+            );" | grep -qx t
+      - name: Probar ciclo funcional de caja
+        env:
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d cash_migrations_test -f supabase/tests/cash-postgres/behavior.sql

@@ -28,7 +28,7 @@ export class CajaMovimiento {
   @Column({ type: 'varchar', length: 200 })
   motivo: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'int', nullable: true })
   comprobanteId: number | null;
 
   @Column({

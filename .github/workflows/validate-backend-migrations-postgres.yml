@@ -1,0 +1,118 @@
+name: Validar instalación limpia backend PostgreSQL
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/src/**"
+      - "backend/src/database/data-source.ts"
+      - "backend/src/database/run-migrations.ts"
+      - "backend/package.json"
+      - "backend/package-lock.json"
+      - ".github/workflows/validate-backend-migrations-postgres.yml"
+  push:
+    branches: ["fix/cloudflare-pages-types-1.44.78"]
+    paths:
+      - "backend/src/database/migrations/**"
+      - "backend/src/database/data-source.ts"
+      - "backend/src/database/run-migrations.ts"
+      - "backend/package.json"
+      - "backend/package-lock.json"
+      - ".github/workflows/validate-backend-migrations-postgres.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clean-install:
+    name: Migraciones TypeORM desde cero
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pos_migrations_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pos_migrations_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_DATABASE: pos_migrations_test
+      DB_SSL: "false"
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias bloqueadas
+        run: npm ci
+
+      - name: Aplicar todas las migraciones en base vacía
+        run: npm run migration:run
+
+      - name: Verificar tablas, columnas y registro de migraciones
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" <<'SQL'
+          DO $$
+          DECLARE
+            migration_count integer;
+          BEGIN
+            SELECT COUNT(*) INTO migration_count FROM migrations;
+            IF migration_count <> 23 THEN
+              RAISE EXCEPTION 'Se esperaban 23 migraciones TypeORM; se aplicaron %', migration_count;
+            END IF;
+
+            IF to_regclass('public.devolucion_venta') IS NULL
+              OR to_regclass('public.devolucion_venta_linea') IS NULL
+              OR to_regclass('public.devolucion_venta_pago') IS NULL
+              OR to_regclass('public.devolucion_venta_lote') IS NULL
+              OR to_regclass('public.producto_variante_stock') IS NULL
+              OR to_regclass('public.inventario_lote') IS NULL
+              OR to_regclass('public.comprobante_lote_salida') IS NULL THEN
+              RAISE EXCEPTION 'Faltan tablas críticas de ventas, variantes, lotes o devoluciones';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema='public' AND table_name='devolucion_venta_linea' AND column_name='variante_id'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema='public' AND table_name='inventario_lote' AND column_name='variante_id'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema='public' AND table_name='comprobante_lote_salida' AND column_name='variante_id'
+            ) THEN
+              RAISE EXCEPTION 'Faltan columnas variante_id en tablas de devoluciones/lotes';
+            END IF;
+          END $$;
+          SQL
+        env:
+          PGPASSWORD: postgres
+
+      - name: Confirmar segunda ejecución sin cambios
+        run: |
+          set -euo pipefail
+          output="$(npm run migration:run 2>&1)"
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q "Migraciones ejecutadas: 0"

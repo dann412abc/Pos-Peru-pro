@@ -101,10 +101,11 @@ export class VentasService {
     const repo = manager.getRepository(Cliente);
     const existente = await repo.findOne({ where: { empresaId, tipoDoc, numero } });
     if (existente) return existente;
-    return repo.save(repo.create({
-      empresaId, tipoDoc, numero, nombre: nombre.trim(), direccion: direccion || null,
+    const nuevoCliente = repo.create({
+      empresaId, tipoDoc, numero, nombre: nombre.trim(), direccion: direccion || undefined,
       limiteCredito: 0, saldoCredito: 0,
-    }));
+    });
+    return repo.save(nuevoCliente);
   }
 
   async create(
@@ -353,8 +354,8 @@ export class VentasService {
               baseImponible: calculada.baseImponible, igv: calculada.igv, subtotal: calculada.subtotal,
             });
           }),
-        });
-        const guardado = await compRepo.save(comp);
+        } as any)[0] as Comprobante;
+        const guardado: Comprobante = await compRepo.save(comp);
 
         await manager.getRepository(ComprobantePago).save(pagos.map((pago) => ({
           comprobanteId: guardado.id,
@@ -724,17 +725,33 @@ export class VentasService {
              AND variante_id IS NOT DISTINCT FROM $4::int FOR UPDATE`,
           [empresaId, c.id, productoId, varianteId],
         );
-        if (asignaciones.length) {
-          for (const a of asignaciones) {
-            await manager.query('UPDATE inventario_lote SET cantidad_disponible=cantidad_disponible+$1 WHERE id=$2', [a.cantidad, a.lote_id]);
-          }
-        } else {
-          await manager.query(
-            `INSERT INTO inventario_lote
-              (empresa_id,sucursal_id,producto_id,variante_id,codigo_lote,fecha_vencimiento,cantidad_inicial,cantidad_disponible,costo_unitario)
-             VALUES($1,$2,$3,$4,$5,NULL,$6,$6,0)`,
-            [empresaId, c.sucursalId, productoId, varianteId, `ANULACION-${c.id}-${varianteId || productoId}`, cantidad],
+        if (!asignaciones.length) {
+          throw new BadRequestException(
+            `No se puede anular: la venta ${c.serie}-${c.correlativo} no tiene trazabilidad de lotes para ${varianteId ? `la variante ${varianteId}` : `el producto ${productoId}`}. Se requiere regularización de inventario.`,
           );
+        }
+        if (asignaciones.some((a) => !Number.isFinite(Number(a.cantidad)) || Number(a.cantidad) <= 0)) {
+          throw new BadRequestException('No se puede anular: existe una asignación de lote con cantidad inválida.');
+        }
+        const cantidadAsignada = asignaciones.reduce((sum, a) => sum + Number(a.cantidad), 0);
+        if (Math.abs(cantidadAsignada - cantidad) > 0.0005) {
+          throw new BadRequestException('No se puede anular: las cantidades de lotes no coinciden con las líneas de venta.');
+        }
+        for (const a of asignaciones) {
+          const lote = await manager.query(
+            `UPDATE inventario_lote
+             SET cantidad_disponible=cantidad_disponible+$1
+             WHERE id=$2 AND empresa_id=$3 AND sucursal_id=$4
+               AND producto_id=$5 AND variante_id IS NOT DISTINCT FROM $6::int
+               AND cantidad_disponible >= 0
+               AND cantidad_inicial IS NOT NULL
+               AND cantidad_disponible+$1 <= cantidad_inicial
+             RETURNING id`,
+            [a.cantidad, a.lote_id, empresaId, c.sucursalId, productoId, varianteId],
+          );
+          if (!lote.length) {
+            throw new BadRequestException('No se puede anular: la reposición superaría la cantidad inicial del lote o el lote no corresponde a esta venta y sucursal.');
+          }
         }
         await manager.getRepository(MovimientoInventario).save({
           empresaId, sucursalId: c.sucursalId, productoId, varianteId,

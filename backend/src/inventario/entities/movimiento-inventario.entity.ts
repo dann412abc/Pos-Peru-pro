@@ -17,7 +17,7 @@ export class MovimientoInventario {
   @Column({ type: 'int', nullable: true })
   varianteId: number | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'int', nullable: true })
   comprobanteId: number | null;
 
   @Column()
@@ -35,7 +35,7 @@ export class MovimientoInventario {
   @Column({ type: 'numeric', precision: 12, scale: 3, nullable: true })
   stockPosterior: number | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'int', nullable: true })
   transferenciaId: number | null;
 
   @Column({

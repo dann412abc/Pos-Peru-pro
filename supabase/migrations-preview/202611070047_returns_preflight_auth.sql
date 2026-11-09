@@ -24,7 +24,6 @@ DECLARE
   v_disponible_efectivo numeric(14,2) := 0;
   v_motivo text;
   v_key text;
-  v_hash text;
   v_prev record;
   v_line jsonb;
   v_id integer;
@@ -52,17 +51,7 @@ BEGIN
     RAISE EXCEPTION 'No repita líneas en la misma devolución' USING ERRCODE='22023';
   END IF;
 
-  v_hash:=md5(jsonb_build_object(
-    'comprobanteId',p_comprobante_id,'motivo',v_motivo,
-    'lineas',(SELECT COALESCE(jsonb_agg(jsonb_build_object(
-      'comprobanteLineaId',(x->>'comprobanteLineaId')::integer,
-      'cantidad',round((x->>'cantidad')::numeric,3),
-      'reingresarStock',COALESCE((x->>'reingresarStock')::boolean,false)
-    ) ORDER BY (x->>'comprobanteLineaId')::integer),'[]'::jsonb) FROM jsonb_array_elements(p_payload->'lineas') x),
-    'pagos',COALESCE(p_payload->'pagos','[]'::jsonb)
-  )::text);
-
-  PERFORM pg_advisory_xact_lock(hashtextextended('pos-return-preflight:'||v_empresa||':'||v_usuario||':'||v_key,0));
+  PERFORM pg_advisory_xact_lock(hashtextextended('mi-carrito-pos:devolucion:'||v_empresa||':'||v_usuario||':'||v_key,0));
   SELECT id,request_hash INTO v_prev FROM public.devolucion_venta
   WHERE empresa_id=v_empresa AND usuario_id=v_usuario AND idempotency_key=v_key;
   IF FOUND THEN

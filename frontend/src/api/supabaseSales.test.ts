@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { post } = vi.hoisted(() => ({ post: vi.fn() }));
-vi.mock('axios', () => ({ default: { post } }));
+vi.mock('axios', () => ({ default: { post, isAxiosError: (error: any) => Boolean(error?.isAxiosError) } }));
 vi.mock('./client', () => ({ getAccessToken: () => 'valid-supabase-jwt' }));
 
 import { crearVentaSupabase, consultarEstadoVentaSupabase, obtenerClaveVentaSupabase, limpiarClaveVentaSupabase, guardarIntentoVentaPendienteSupabase, obtenerIntentoVentaPendienteSupabase, consultarDetalleComprobanteSupabase } from './supabaseSales';
@@ -17,7 +17,16 @@ const payload = {
 };
 
 describe('adaptador de ventas Supabase', () => {
-  beforeEach(() => { post.mockReset(); localStorage.clear(); });
+  beforeEach(() => {
+    const values = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.has(key) ? values.get(key)! : null,
+      setItem: (key: string, value: string) => { values.set(key, String(value)); },
+      removeItem: (key: string) => { values.delete(key); },
+      clear: () => { values.clear(); },
+    });
+    post.mockReset();
+  });
 
   it('llama exclusivamente a la RPC autenticada con p_payload', async () => {
     post.mockResolvedValue({ data: { ok: true, decision: 'CREATED', comprobanteId: 90, serie: 'B001', correlativo: 5, total: 10 } });

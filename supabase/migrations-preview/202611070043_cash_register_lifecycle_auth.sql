@@ -5,13 +5,13 @@ CREATE OR REPLACE FUNCTION public.pos_caja_abrir_auth(p_sucursal_id integer,p_sa
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path=pg_catalog,public,auth
 AS $fn$
-DECLARE v_auth uuid:=auth.uid(); v_usuario integer; v_empresa integer; v_id integer; v_fecha timestamptz;
+DECLARE v_auth uuid:=auth.uid(); v_usuario integer; v_empresa integer; v_id integer; v_fecha timestamptz; v_constraint text;
 BEGIN
  IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
  IF p_sucursal_id IS NULL OR p_sucursal_id<=0 OR p_saldo_inicial IS NULL OR p_saldo_inicial<0 OR p_saldo_inicial<>round(p_saldo_inicial,2) THEN
   RAISE EXCEPTION 'CASH_OPEN_INPUT_INVALID' USING ERRCODE='22023';
  END IF;
- SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE supabase_auth_user_id=v_auth AND activo=true;
+ SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE auth_user_id=v_auth AND activo=true;
  IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.sucursal s JOIN public.usuario_sucursal us ON us.sucursal_id=s.id WHERE s.id=p_sucursal_id AND s.empresa_id=v_empresa AND us.usuario_id=v_usuario) THEN
   RAISE EXCEPTION 'Sucursal no autorizada' USING ERRCODE='42501';
@@ -21,7 +21,11 @@ BEGIN
  RETURNING id,fecha_apertura INTO v_id,v_fecha;
  RETURN jsonb_build_object('id',v_id,'sucursalId',p_sucursal_id,'saldoInicial',p_saldo_inicial,'fechaApertura',v_fecha,'estado','ABIERTA');
 EXCEPTION WHEN unique_violation THEN
- RAISE EXCEPTION 'CASH_ALREADY_OPEN' USING ERRCODE='23505';
+ GET STACKED DIAGNOSTICS v_constraint = CONSTRAINT_NAME;
+ IF v_constraint = 'uq_caja_abierta_sucursal_usuario' THEN
+  RAISE EXCEPTION 'CASH_ALREADY_OPEN' USING ERRCODE='23505';
+ END IF;
+ RAISE;
 END;
 $fn$;
 
@@ -36,7 +40,7 @@ BEGIN
     OR p_monto IS NULL OR p_monto<=0 OR p_monto<>round(p_monto,2) OR length(trim(COALESCE(p_motivo,'')))<5 OR length(p_motivo)>200 THEN
   RAISE EXCEPTION 'CASH_MOVEMENT_INPUT_INVALID' USING ERRCODE='22023';
  END IF;
- SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE supabase_auth_user_id=v_auth AND activo=true;
+ SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE auth_user_id=v_auth AND activo=true;
  IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
  SELECT c.estado INTO v_estado FROM public.caja c JOIN public.sucursal s ON s.id=c.sucursal_id
  JOIN public.usuario_sucursal us ON us.sucursal_id=c.sucursal_id AND us.usuario_id=v_usuario
@@ -45,7 +49,11 @@ BEGIN
  IF p_tipo='SALIDA' AND p_metodo='EFECTIVO' THEN
   SELECT round(c.saldo_inicial + COALESCE((
     SELECT SUM(cp.monto) FROM public.comprobante_pago cp JOIN public.comprobante co ON co.id=cp.comprobante_id
-    WHERE co.caja_id=c.id AND cp.metodo_pago='EFECTIVO' AND co.estado<>'ANULADA'
+    WHERE co.caja_id=c.id AND co.empresa_id=v_empresa AND cp.metodo_pago='EFECTIVO'
+  ),0) + COALESCE((
+    SELECT SUM(co.total) FROM public.comprobante co
+    WHERE co.caja_id=c.id AND co.empresa_id=v_empresa AND co.metodo_pago='EFECTIVO'
+      AND NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=co.id)
   ),0) + COALESCE((
     SELECT SUM(CASE WHEN cm.tipo='INGRESO' THEN cm.monto ELSE -cm.monto END)
     FROM public.caja_movimiento cm WHERE cm.caja_id=c.id AND cm.metodo_pago='EFECTIVO'
@@ -64,13 +72,31 @@ SET search_path=pg_catalog,public,auth
 AS $fn$
 DECLARE v_auth uuid:=auth.uid(); v_usuario integer; v_empresa integer; v_caja public.caja%ROWTYPE;
  v_efectivo numeric(12,2); v_tarjeta numeric(12,2); v_yape numeric(12,2); v_plin numeric(12,2); v_credito numeric(12,2);
- v_mov_efectivo numeric(12,2); v_mov_tarjeta numeric(12,2); v_mov_yape numeric(12,2); v_mov_plin numeric(12,2); v_esperado numeric(12,2); v_diferencia numeric(12,2); v_esperado_metodos jsonb;
- v_linea jsonb; v_metodo text; v_contado numeric(12,2); v_arqueo_final jsonb:='[]'::jsonb;
+ v_efectivo_fisico numeric(12,2); v_mov_efectivo numeric(12,2); v_mov_tarjeta numeric(12,2); v_mov_yape numeric(12,2); v_mov_plin numeric(12,2); v_esperado numeric(12,2); v_diferencia numeric(12,2); v_esperado_metodos jsonb;
+ v_metodo text; v_contado numeric(12,2); v_arqueo_final jsonb:='[]'::jsonb; v_item jsonb; v_item_metodo text; v_item_monto numeric;
 BEGIN
  IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
  IF p_caja_id IS NULL OR p_caja_id<=0 OR p_efectivo_contado IS NULL OR p_efectivo_contado<0 OR p_efectivo_contado<>round(p_efectivo_contado,2)
-    OR jsonb_typeof(p_arqueo)<>'array' THEN RAISE EXCEPTION 'CASH_CLOSE_INPUT_INVALID' USING ERRCODE='22023'; END IF;
- SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE supabase_auth_user_id=v_auth AND activo=true;
+    OR COALESCE(jsonb_typeof(p_arqueo),'null')<>'array' THEN RAISE EXCEPTION 'CASH_CLOSE_INPUT_INVALID' USING ERRCODE='22023'; END IF;
+ FOR v_item IN SELECT value FROM jsonb_array_elements(p_arqueo) LOOP
+   IF jsonb_typeof(v_item)<>'object'
+      OR EXISTS(SELECT 1 FROM jsonb_object_keys(v_item) AS keys(key) WHERE key NOT IN ('metodoPago','montoContado'))
+      OR NOT (v_item ? 'metodoPago' AND v_item ? 'montoContado') THEN
+    RAISE EXCEPTION 'CASH_CLOSE_COUNT_INVALID' USING ERRCODE='22023';
+   END IF;
+   v_item_metodo:=v_item->>'metodoPago';
+   IF v_item_metodo NOT IN ('TARJETA','YAPE','PLIN')
+      OR jsonb_typeof(v_item->'montoContado')<>'number'
+      OR COALESCE(v_item->>'montoContado','') !~ '^[0-9]+(\.[0-9]{1,2})?$' THEN
+    RAISE EXCEPTION 'CASH_CLOSE_COUNT_INVALID' USING ERRCODE='22023';
+   END IF;
+   v_item_monto:=(v_item->>'montoContado')::numeric;
+   IF v_item_monto<0 OR v_item_monto<>round(v_item_monto,2)
+      OR (SELECT COUNT(*) FROM jsonb_array_elements(p_arqueo) x WHERE x->>'metodoPago'=v_item_metodo)>1 THEN
+    RAISE EXCEPTION 'CASH_CLOSE_COUNT_INVALID' USING ERRCODE='22023';
+   END IF;
+  END LOOP;
+  SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE auth_user_id=v_auth AND activo=true;
  IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
  SELECT c.* INTO v_caja FROM public.caja c JOIN public.sucursal s ON s.id=c.sucursal_id
  JOIN public.usuario_sucursal us ON us.sucursal_id=c.sucursal_id AND us.usuario_id=v_usuario
@@ -91,6 +117,18 @@ BEGIN
   WHERE co.caja_id=p_caja_id AND co.empresa_id=v_empresa AND co.estado<>'ANULADA'
    AND NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=co.id)
  ) p;
+ -- Efectivo físico: incluye ventas anuladas porque el cobro sí ingresó;
+ -- los reembolsos se descuentan una sola vez mediante caja_movimiento.
+ SELECT COALESCE(SUM(monto),0) INTO v_efectivo_fisico
+ FROM (
+  SELECT cp.monto FROM public.comprobante_pago cp
+  JOIN public.comprobante co ON co.id=cp.comprobante_id
+  WHERE co.caja_id=p_caja_id AND co.empresa_id=v_empresa AND cp.metodo_pago='EFECTIVO'
+  UNION ALL
+  SELECT co.total FROM public.comprobante co
+  WHERE co.caja_id=p_caja_id AND co.empresa_id=v_empresa AND co.metodo_pago='EFECTIVO'
+   AND NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=co.id)
+ ) cobros_efectivo_fisico;
  SELECT
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='EFECTIVO'),0),
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='TARJETA'),0),
@@ -98,7 +136,7 @@ BEGIN
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='PLIN'),0)
  INTO v_mov_efectivo,v_mov_tarjeta,v_mov_yape,v_mov_plin
  FROM public.caja_movimiento WHERE caja_id=p_caja_id;
- v_esperado:=round(COALESCE(v_caja.saldo_inicial,0)+v_efectivo+v_mov_efectivo,2);
+ v_esperado:=round(COALESCE(v_caja.saldo_inicial,0)+COALESCE(v_efectivo_fisico,0)+v_mov_efectivo,2);
  v_diferencia:=round(p_efectivo_contado-v_esperado,2);
  v_esperado_metodos:=jsonb_build_object(
   'EFECTIVO',v_esperado,

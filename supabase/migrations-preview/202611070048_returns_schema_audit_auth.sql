@@ -22,7 +22,7 @@ BEGIN
 
   v_requeridos := jsonb_build_array(
     jsonb_build_object('tabla','comprobante','columnas',jsonb_build_array('id','empresa_id','sucursal_id','cliente_id','caja_id','tipo','serie','correlativo','total','estado','metodo_pago','devolucion_venta_id')),
-    jsonb_build_object('tabla','comprobante_linea','columnas',jsonb_build_array('id','comprobante_id','producto_id','variante_id','cantidad','precio_unitario','descuento','tipo_igv','subtotal')),
+    jsonb_build_object('tabla','comprobante_linea','columnas',jsonb_build_array('id','comprobante_id','producto_id','variante_id','cantidad','precio_unitario','costo_unitario','descuento','tipo_igv','subtotal')),
     jsonb_build_object('tabla','comprobante_pago','columnas',jsonb_build_array('comprobante_id','metodo_pago','monto')),
     jsonb_build_object('tabla','devolucion_venta','columnas',jsonb_build_array('id','empresa_id','sucursal_id','comprobante_id','cliente_id','usuario_id','caja_id','motivo','total_devolucion','credito_revertido','monto_reembolsado','idempotency_key','request_hash','estado','created_at')),
     jsonb_build_object('tabla','devolucion_venta_linea','columnas',jsonb_build_array('id','devolucion_id','empresa_id','sucursal_id','comprobante_linea_id','producto_id','variante_id','cantidad','monto','reingresar_stock')),
@@ -30,9 +30,9 @@ BEGIN
     jsonb_build_object('tabla','devolucion_venta_lote','columnas',jsonb_build_array('devolucion_linea_id','lote_id','cantidad')),
     jsonb_build_object('tabla','caja','columnas',jsonb_build_array('id','sucursal_id','usuario_id','estado','saldo_inicial')),
     jsonb_build_object('tabla','caja_movimiento','columnas',jsonb_build_array('caja_id','usuario_id','tipo','metodo_pago','monto','motivo','comprobante_id','devolucion_venta_id')),
-    jsonb_build_object('tabla','producto_stock','columnas',jsonb_build_array('producto_id','sucursal_id','empresa_id','stock','updated_at')),
+    jsonb_build_object('tabla','producto_stock','columnas',jsonb_build_array('producto_id','sucursal_id','empresa_id','stock','costo_promedio','updated_at')),
     jsonb_build_object('tabla','producto_variante_stock','columnas',jsonb_build_array('variante_id','producto_id','sucursal_id','empresa_id','stock','updated_at')),
-    jsonb_build_object('tabla','inventario_lote','columnas',jsonb_build_array('id','empresa_id','sucursal_id','producto_id','variante_id','cantidad_disponible','codigo_lote')),
+    jsonb_build_object('tabla','inventario_lote','columnas',jsonb_build_array('id','empresa_id','sucursal_id','producto_id','variante_id','cantidad_disponible','codigo_lote','costo_unitario')),
     jsonb_build_object('tabla','comprobante_lote_salida','columnas',jsonb_build_array('id','empresa_id','comprobante_id','producto_id','variante_id','lote_id','cantidad')),
     jsonb_build_object('tabla','movimiento_inventario','columnas',jsonb_build_array('empresa_id','sucursal_id','producto_id','variante_id','comprobante_id','usuario_id','tipo','cantidad','stock_anterior','stock_posterior','motivo')),
     jsonb_build_object('tabla','cuenta_cobrar','columnas',jsonb_build_array('id','comprobante_id','empresa_id','sucursal_id','saldo_pendiente','monto_revertido','estado','updated_at')),

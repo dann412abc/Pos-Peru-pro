@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import {
   BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +6,7 @@ import { FeService } from '../fe/fe.service';
 import { Comprobante } from '../ventas/entities/comprobante.entity';
 import { SERIE_POR_DEFECTO } from '../common/enums';
 import { CrearDevolucionVentaDto } from './dto/crear-devolucion.dto';
+import { hashSolicitudDevolucion } from './devolucion-idempotency';
 import { calcularImporteDevolucion, distribuirDevolucion, redondearCantidad, redondearMonto, validarTotalReembolsos } from './devolucion-calculations';
 
 const money = redondearMonto;
@@ -22,18 +22,6 @@ export class DevolucionesService {
     return sucursalId ? [sucursalId] : permitidas;
   }
 
-  private hashSolicitud(dto: CrearDevolucionVentaDto): string {
-    const contenido = {
-      motivo: dto.motivo.trim(),
-      lineas: [...(dto.lineas || [])].map((l) => ({
-        comprobanteLineaId: Number(l.comprobanteLineaId), cantidad: quantity(Number(l.cantidad)), reingresarStock: Boolean(l.reingresarStock),
-      })).sort((a, b) => a.comprobanteLineaId - b.comprobanteLineaId),
-      pagos: [...(dto.pagos || [])].map((p) => ({
-        metodoPago: p.metodoPago, monto: money(Number(p.monto)), referencia: (p.referencia || '').trim(),
-      })).sort((a, b) => `${a.metodoPago}:${a.monto}:${a.referencia}`.localeCompare(`${b.metodoPago}:${b.monto}:${b.referencia}`)),
-    };
-    return createHash('sha256').update(JSON.stringify(contenido)).digest('hex');
-  }
 
   async listar(empresaId: number, sucursalIds: number[], sucursalId?: number): Promise<any[]> {
     const ids = this.validarSucursales(sucursalIds, sucursalId);
@@ -48,7 +36,7 @@ export class DevolucionesService {
               nc.id AS "notaCreditoId", nc.serie AS "notaCreditoSerie", nc.correlativo AS "notaCreditoCorrelativo"
        FROM devolucion_venta d
        INNER JOIN comprobante c ON c.id=d.comprobante_id AND c.empresa_id=d.empresa_id
-       INNER JOIN cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
+       LEFT JOIN cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
        INNER JOIN usuario u ON u.id=d.usuario_id AND u.empresa_id=d.empresa_id
        LEFT JOIN comprobante nc ON nc.devolucion_venta_id=d.id AND nc.empresa_id=d.empresa_id AND nc.tipo='07'
        WHERE d.empresa_id=$1 AND d.sucursal_id=ANY($2::int[])
@@ -66,7 +54,7 @@ export class DevolucionesService {
               c.fecha_emision AS "fechaEmision",
               jsonb_build_object('nombre',cl.nombre) AS cliente
        FROM comprobante c
-       INNER JOIN cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
+       LEFT JOIN cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
        WHERE c.empresa_id=$1 AND c.sucursal_id=ANY($2::int[])
          AND c.tipo IN ('01','03') AND c.estado <> 'ANULADA'
          AND (
@@ -86,7 +74,7 @@ export class DevolucionesService {
     const comprobantes = await this.dataSource.query(
       `SELECT c.id,c.sucursal_id AS "sucursalId",c.cliente_id AS "clienteId",c.tipo,c.serie,
               c.correlativo,c.total,c.estado,c.fecha_emision AS "fechaEmision",cl.nombre AS "clienteNombre"
-       FROM comprobante c INNER JOIN cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
+       FROM comprobante c LEFT JOIN cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
        WHERE c.id=$1 AND c.empresa_id=$2 AND c.sucursal_id=ANY($3::int[])`, [comprobanteId, empresaId, ids],
     );
     if (!comprobantes.length) throw new NotFoundException('Comprobante no encontrado');
@@ -128,7 +116,7 @@ export class DevolucionesService {
               c.tipo,c.serie,c.correlativo,cl.nombre AS "clienteNombre",u.nombre AS responsable
        FROM devolucion_venta d
        INNER JOIN comprobante c ON c.id=d.comprobante_id AND c.empresa_id=d.empresa_id
-       INNER JOIN cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
+       LEFT JOIN cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
        INNER JOIN usuario u ON u.id=d.usuario_id AND u.empresa_id=d.empresa_id
        WHERE d.id=$1 AND d.empresa_id=$2 AND d.sucursal_id=ANY($3::int[])`, [id, empresaId, ids],
     );
@@ -255,7 +243,7 @@ export class DevolucionesService {
     if (!motivo || motivo.length < 5) throw new BadRequestException('Indique un motivo de al menos 5 caracteres');
     if (!clave || clave.length < 8 || clave.length > 100) throw new BadRequestException('La clave de operación es inválida');
     if (!Array.isArray(dto.lineas) || !dto.lineas.length || dto.lineas.length > 100) throw new BadRequestException('Seleccione al menos una línea para devolver');
-    const hash = this.hashSolicitud(dto);
+    const hash = hashSolicitudDevolucion(comprobanteId, dto);
 
     try {
       await this.dataSource.transaction(async (manager: EntityManager) => {
@@ -293,7 +281,7 @@ export class DevolucionesService {
         if (!cajasAbiertas.length) throw new BadRequestException('Abra una caja en la sucursal de la venta para registrar la devolución');
         const cajaId = Number(cajasAbiertas[0].id);
         const originales = await manager.query(
-          `SELECT cl.id,cl.producto_id,cl.variante_id,cl.cantidad,cl.precio_unitario,cl.subtotal,
+          `SELECT cl.id,cl.producto_id,cl.variante_id,cl.cantidad,cl.precio_unitario,cl.costo_unitario,cl.subtotal,
                    p.nombre,COALESCE(pv.nombre,'') AS variante_nombre
             FROM comprobante_linea cl
             INNER JOIN producto p ON p.id=cl.producto_id AND p.empresa_id=$2
@@ -359,15 +347,20 @@ export class DevolucionesService {
            WHERE comprobante_id=$1 AND empresa_id=$2 AND sucursal_id=$3 FOR UPDATE`,
           [comprobanteId, empresaId, venta.sucursal_id],
         );
-        const clienteBloqueado = await manager.query(
-          `SELECT id FROM cliente WHERE id=$1 AND empresa_id=$2 FOR UPDATE`, [venta.cliente_id, empresaId],
-        );
-        if (!clienteBloqueado.length) throw new NotFoundException('Cliente de la venta no encontrado');
+        if (venta.cliente_id !== null && venta.cliente_id !== undefined) {
+          const clienteBloqueado = await manager.query(
+            `SELECT id FROM cliente WHERE id=$1 AND empresa_id=$2 FOR UPDATE`, [venta.cliente_id, empresaId],
+          );
+          if (!clienteBloqueado.length) throw new NotFoundException('Cliente de la venta no encontrado');
+        }
         const pagosOriginales = await manager.query(
           `SELECT metodo_pago AS metodo,monto FROM comprobante_pago WHERE comprobante_id=$1`, [comprobanteId],
         );
         const creditoOriginal = money(pagosOriginales.filter((p: any) => p.metodo === 'CREDITO')
           .reduce((sum: number, p: any) => sum + Number(p.monto), 0));
+        if (creditoOriginal > 0 && venta.cliente_id == null) {
+          throw new ConflictException('La venta tiene crédito pero no tiene cliente asociado. Corrija el comprobante antes de devolver.');
+        }
         if (!cuentas.length && creditoOriginal > 0) {
           throw new ConflictException('La venta contiene crédito pero no tiene cuenta por cobrar asociada. Revise la migración antes de devolver.');
         }
@@ -492,12 +485,16 @@ export class DevolucionesService {
               if (lotesOrigen.length) {
                 throw new BadRequestException('No se pudo identificar el lote original completo para reingresar la devolución. Revise la trazabilidad del comprobante.');
               }
+              const costoOriginal = Number(item.original.costo_unitario);
+              if (!Number.isFinite(costoOriginal) || costoOriginal < 0) {
+                throw new BadRequestException('No se puede reingresar el producto: el costo histórico de la venta no es válido.');
+              }
               await manager.query(
                 `INSERT INTO inventario_lote
                   (empresa_id,sucursal_id,producto_id,variante_id,codigo_lote,fecha_vencimiento,cantidad_inicial,cantidad_disponible,costo_unitario)
-                 VALUES($1,$2,$3,$4,$5,NULL,$6,$6,0)`,
+                 VALUES($1,$2,$3,$4,$5,NULL,$6,$6,$7)`,
                 [empresaId, venta.sucursal_id, item.original.producto_id, varianteId,
-                  `DEVCLIENTE-${devolucionId}-${item.original.id}`, pendiente],
+                  `DEVCLIENTE-${devolucionId}-${item.original.id}`, pendiente, costoOriginal],
               );
             }
             await manager.query(
@@ -517,10 +514,12 @@ export class DevolucionesService {
             `UPDATE cuenta_cobrar SET saldo_pendiente=$1,monto_revertido=monto_revertido+$2,estado=$3,updated_at=NOW()
              WHERE id=$4 AND empresa_id=$5`, [nuevoSaldo, creditoRevertido, nuevoEstado, cuentas[0].id, empresaId],
           );
-          await manager.query(
-            `UPDATE cliente SET saldo_credito=GREATEST(0,saldo_credito-$1) WHERE id=$2 AND empresa_id=$3`,
-            [creditoRevertido, venta.cliente_id, empresaId],
-          );
+          if (venta.cliente_id != null) {
+            await manager.query(
+              `UPDATE cliente SET saldo_credito=GREATEST(0,saldo_credito-$1) WHERE id=$2 AND empresa_id=$3`,
+              [creditoRevertido, venta.cliente_id, empresaId],
+            );
+          }
           if (nuevoSaldo <= 0) {
             await manager.query(`UPDATE comprobante SET estado='PAGADA' WHERE id=$1 AND empresa_id=$2 AND estado='PENDIENTE'`, [comprobanteId, empresaId]);
           }

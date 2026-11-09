@@ -13,11 +13,11 @@ test('cash summary subtracts refunds by actual refund payment method',()=>{
  assert.match(sql,/totalDevoluciones/);
  assert.match(sql,/v_efectivo_esperado:=round/);
 });
-test('refunds appear as cash outflows in persistent movement history',()=>{
- assert.match(sql,/'tipo','SALIDA'/);
- assert.match(sql,/'motivo','Reembolso devolución #'/);
- assert.match(sql,/d\.caja_id=p_caja_id/);
- assert.match(sql,/d\.usuario_id=v_usuario/);
+test('history returns only persisted cash movements and does not synthesize refund rows',()=>{
+ assert.match(sql,/FROM public\.caja_movimiento cm/);
+ assert.match(sql,/WHERE cm\.caja_id=p_caja_id AND cm\.usuario_id=v_usuario/);
+ assert.doesNotMatch(sql,/Reembolso devolución #/);
+ assert.doesNotMatch(sql,/UNION ALL[\\s\\S]*devolucion_venta_pago/);
 });
 test('both RPCs remain authenticated and scoped to owned cash register',()=>{
  assert.match(sql,/auth\.uid\(\)/);

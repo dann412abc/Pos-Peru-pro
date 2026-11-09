@@ -5,7 +5,7 @@ const sql = readFileSync(new URL('./202611070042_cash_register_summary_auth.sql'
 const edge = readFileSync(new URL('../../frontend/functions/api/edge/[[path]].js', import.meta.url), 'utf8');
 test('resumen de caja deriva identidad de auth.uid y valida empresa/sucursal/propietario', () => {
   assert.match(sql, /auth\.uid\(\)/);
-  assert.match(sql, /supabase_auth_user_id=v_auth/);
+  assert.match(sql, /auth_user_id=v_auth/);
   assert.match(sql, /s\.empresa_id=v_empresa/);
   assert.match(sql, /c\.usuario_id=v_usuario/);
   assert.match(sql, /usuario_sucursal/);

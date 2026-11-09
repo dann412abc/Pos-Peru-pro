@@ -66,8 +66,10 @@ async function readSnapshot(client, spec) {
       (SELECT count(*)::int FROM public.caja_movimiento cm
          JOIN public.caja ca ON ca.id=cm.caja_id
          JOIN public.sucursal su ON su.id=ca.sucursal_id
-         WHERE su.empresa_id=$1 AND su.id=$2) AS movimientos_caja
-  `, [spec.empresaId, spec.sucursalId]);
+         WHERE su.empresa_id=$1 AND su.id=$2) AS movimientos_caja,
+      (SELECT ultimo_correlativo FROM public.serie_correlativo
+         WHERE sucursal_id=$2 AND tipo_comprobante=$3 AND serie=$4) AS ultimo_correlativo
+  `, [spec.empresaId, spec.sucursalId, spec.tipoComprobante || null, spec.serie || null]);
   let stock = null;
   if (spec.stock?.variantId) {
     const r = await client.query(
@@ -216,6 +218,10 @@ test('staging harness requires explicit opt-in and a fixture', { skip: !enabled 
         thrown = error;
       }
       assert.ok(thrown, 'rollback scenario must fail');
+      assert.ok(spec.tipoComprobante && spec.serie,
+        'rollbackCase must identify tipoComprobante and serie to verify correlativo rollback');
+      assert.notEqual(before.counts.ultimo_correlativo, null,
+        'rollbackCase must have an existing serie_correlativo row');
       assert.match(String(thrown.message), new RegExp(spec.expectedError || 'SALE_FEFO_LOTS_INSUFFICIENT_OR_EXPIRED'));
       await client.query('ROLLBACK TO SAVEPOINT before_expected_failure');
       await setPrivilegedAssertionRole(client);

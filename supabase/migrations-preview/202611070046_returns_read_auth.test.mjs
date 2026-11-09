@@ -39,3 +39,8 @@ test('frontend read client validates server responses and never registers return
   assert.match(api, /fetchSupabaseReturnAvailability/);
   assert.doesNotMatch(api, /devolucion.*registrar|pos_devolucion_registrar_auth/i);
 });
+
+test('read functions retain receipts and returns without an associated customer', () => {
+  assert.equal((sql.match(/LEFT JOIN public\.cliente cl ON cl\.id=(?:d|c)\.cliente_id/g) || []).length, 3);
+  assert.doesNotMatch(sql, /JOIN public\.cliente cl ON cl\.id=(?:d|c)\.cliente_id/);
+});

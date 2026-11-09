@@ -15,7 +15,7 @@ BEGIN
   IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
   IF p_caja_id IS NULL OR p_caja_id <= 0 THEN RAISE EXCEPTION 'CASH_REGISTER_ID_INVALID' USING ERRCODE='22023'; END IF;
   SELECT u.id,u.empresa_id INTO v_usuario,v_empresa
-  FROM public.usuario u WHERE u.supabase_auth_user_id=v_auth AND u.activo=true;
+  FROM public.usuario u WHERE u.auth_user_id=v_auth AND u.activo=true;
   IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
 
   IF NOT EXISTS (
