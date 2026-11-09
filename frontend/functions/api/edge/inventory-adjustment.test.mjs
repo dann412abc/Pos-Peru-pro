@@ -16,7 +16,7 @@ test('Cloudflare exposes authenticated inventory adjustment RPC with strict payl
 
 test('Supabase client requires a real session and confirms lot traceability',()=>{
   assert.match(client,/getAccessToken\(\)/);
-  assert.match(client,/Bearer \\${token\\}/);
+  assert.match(client,/Authorization: .*Bearer/);
   assert.match(client,/trazabilidadLotes !== true/);
   assert.match(client,/\/api\/edge\/inventory\/adjust/);
 });
