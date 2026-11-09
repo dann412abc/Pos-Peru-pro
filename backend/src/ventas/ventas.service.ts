@@ -102,9 +102,9 @@ export class VentasService {
     const existente = await repo.findOne({ where: { empresaId, tipoDoc, numero } });
     if (existente) return existente;
     const nuevoCliente = repo.create({
-      empresaId, tipoDoc, numero, nombre: nombre.trim(), direccion: direccion || null,
+      empresaId, tipoDoc, numero, nombre: nombre.trim(), direccion: direccion || undefined,
       limiteCredito: 0, saldoCredito: 0,
-    }) as Cliente;
+    });
     return repo.save(nuevoCliente);
   }
 
@@ -328,7 +328,7 @@ export class VentasService {
         const { correlativo } = await this.obtenerSiguienteCorrelativo(dto.sucursalId, dto.tipo, serie, manager);
 
         const compRepo = manager.getRepository(Comprobante);
-        const comp: Comprobante = compRepo.create({
+        const comp = compRepo.create({
           empresaId, sucursalId: dto.sucursalId, cajaId: caja.id, usuarioId, clienteId: cliente.id,
           cliente, tipo: dto.tipo, serie, correlativo,
           opGravadas: totales.opGravadas, opExoneradas: totales.opExoneradas,
@@ -354,7 +354,7 @@ export class VentasService {
               baseImponible: calculada.baseImponible, igv: calculada.igv, subtotal: calculada.subtotal,
             });
           }),
-        }) as Comprobante;
+        } as any) as Comprobante;
         const guardado: Comprobante = await compRepo.save(comp);
 
         await manager.getRepository(ComprobantePago).save(pagos.map((pago) => ({
