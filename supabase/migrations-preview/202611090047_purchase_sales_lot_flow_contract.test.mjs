@@ -110,3 +110,54 @@ test('FEFO fixture consumes only the selected variant lots in earliest-expiry or
   assert.equal(pending, 0);
   assert.deepEqual(consumed, [{ id: 3, quantity: 2 }, { id: 1, quantity: 2 }]);
 });
+
+const returnSql = read('./202611090003_returns_register_fefo_auth.sql');
+const returnWriter = read('./202611090012_returns_transactional_writer_auth.sql');
+const cashSql = read('./202611070045_cash_refund_reconciliation_auth.sql');
+const returnsApi = read('../../frontend/src/api/supabaseReturns.ts');
+
+test('purchase → FEFO sale → return uses the same original receipt-line and lot trace', () => {
+  assert.match(purchaseSql, /INSERT INTO public\\.inventario_lote/);
+  assert.match(saleSql, /INSERT INTO public\\.comprobante_lote_salida/);
+  assert.match(returnSql, /FROM public\\.comprobante_lote_salida cls[\\s\\S]*?cls\\.comprobante_linea_id=v_linea_id/);
+  assert.match(returnSql, /INSERT INTO public\\.devolucion_venta_lote\\(devolucion_linea_id,lote_id,cantidad\\)/);
+  assert.match(returnSql, /UPDATE public\\.inventario_lote[\\s\\S]*?SET cantidad_disponible=cantidad_disponible\\+v_tomar/);
+  assert.match(returnSql, /La trazabilidad original no cubre la cantidad a devolver/);
+  assert.match(returnSql, /v_result->>'reintento'/);
+});
+
+test('return registration is wired from the authenticated frontend to the FEFO Edge RPC', () => {
+  assert.match(returnsApi, /axios\\.post\\('\/api\/edge\/returns\/register'/);
+  assert.match(edge, /route === 'returns\/register'[\\s\\S]*?pos_devolucion_registrar_auth/);
+  assert.match(edge, /p_comprobante_id:\\s*comprobanteId/);
+  assert.match(returnSql, /FUNCTION public\\.pos_devolucion_registrar_auth\\(integer,jsonb\\)/);
+  assert.match(returnWriter, /pg_advisory_xact_lock/);
+  assert.match(returnWriter, /request_hash IS DISTINCT FROM v_hash/);
+});
+
+test('refund is reconciled once in cash close and history, without counting its cash ledger twice', () => {
+  assert.match(returnWriter, /devolucion_venta_id/);
+  assert.match(returnWriter, /'SALIDA'/);
+  assert.match(cashSql, /devolucion_venta_id IS NULL/);
+  assert.match(cashSql, /FROM public\\.devolucion_venta_pago dp[\\s\\S]*?'Reembolso devolución #'/);
+  assert.match(cashSql, /v_efectivo_esperado:=round\\([\\s\\S]*?v_dev_efectivo/);
+});
+
+test('reference lot allocation restores only the quantities originally consumed', () => {
+  const originalAllocations = [
+    { lot: 'LOT-A', sold: 2, returnedBefore: 0 },
+    { lot: 'LOT-B', sold: 3, returnedBefore: 1 },
+  ];
+  let remainingReturn = 3;
+  const restored = [];
+  for (const allocation of originalAllocations) {
+    const availableToReturn = allocation.sold - allocation.returnedBefore;
+    const quantity = Math.min(remainingReturn, availableToReturn);
+    if (quantity > 0) restored.push({ lot: allocation.lot, quantity });
+    remainingReturn -= quantity;
+    if (remainingReturn <= 0) break;
+  }
+  assert.equal(remainingReturn, 0);
+  assert.deepEqual(restored, [{ lot: 'LOT-A', quantity: 2 }, { lot: 'LOT-B', quantity: 1 }]);
+  assert.equal(restored.reduce((sum, item) => sum + item.quantity, 0), 3);
+});
