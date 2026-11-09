@@ -8,6 +8,7 @@ import Modal from '../components/ui/Modal';
 import type { Producto, TipoIgv } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { fetchCurrentSupabaseCatalog, mapSupabaseProductRows, mutateSupabaseCatalog, mutateSupabaseVariant } from '../api/supabaseCatalog';
+import { registrarAjusteInventarioSupabase } from '../api/supabaseInventory';
 
 type Variante = {
   id?: number; productoId?: number; codigo: string; codigoBarras?: string | null;
@@ -230,7 +231,14 @@ export default function Productos() {
       return;
     }
     try {
-      if (!ES_MODO_DEMO) {
+      if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
+        const sucursalId = Number(usuario?.sucursalId);
+        if (!Number.isSafeInteger(sucursalId) || sucursalId <= 0) throw new Error('No hay una sucursal activa válida');
+        await registrarAjusteInventarioSupabase({
+          sucursalId, productoId: productoAjuste.id, tipo: tipoAjuste, cantidad,
+          motivo: motivoAjuste.trim(), idempotencyKey: nuevaClaveTransferencia(),
+        });
+      } else if (!ES_MODO_DEMO) {
         const sucursalId = Number(usuario?.sucursalId);
         if (!Number.isInteger(sucursalId) || sucursalId <= 0) throw new Error('No hay una sucursal activa válida');
         await api.post('/inventario/movimientos', {
@@ -440,10 +448,19 @@ export default function Productos() {
       toast.error('Explique el motivo con al menos 5 caracteres'); return;
     }
     try {
-      await api.post('/inventario/variantes/ajustes', {
-        varianteId: varianteAjuste.id, sucursalId: Number(usuario.sucursalId),
-        tipo: tipoAjusteVariante, cantidad, motivo: motivoAjusteVariante.trim(), idempotencyKey: claveAjusteVariante,
-      });
+      if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
+        if (!varianteAjuste.productoId) throw new Error('No se pudo identificar el producto de la presentación.');
+        await registrarAjusteInventarioSupabase({
+          varianteId: varianteAjuste.id, productoId: varianteAjuste.productoId,
+          sucursalId: Number(usuario.sucursalId), tipo: tipoAjusteVariante, cantidad,
+          motivo: motivoAjusteVariante.trim(), idempotencyKey: claveAjusteVariante,
+        });
+      } else {
+        await api.post('/inventario/variantes/ajustes', {
+          varianteId: varianteAjuste.id, sucursalId: Number(usuario.sucursalId),
+          tipo: tipoAjusteVariante, cantidad, motivo: motivoAjusteVariante.trim(), idempotencyKey: claveAjusteVariante,
+        });
+      }
       toast.success('Movimiento de variante registrado');
       setVarianteAjuste(null);
       if (productoVariantes) await abrirVariantes(productoVariantes);
