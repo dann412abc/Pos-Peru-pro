@@ -354,7 +354,7 @@ export class VentasService {
               baseImponible: calculada.baseImponible, igv: calculada.igv, subtotal: calculada.subtotal,
             });
           }),
-        } as any) as Comprobante;
+        } as any)[0] as Comprobante;
         const guardado: Comprobante = await compRepo.save(comp);
 
         await manager.getRepository(ComprobantePago).save(pagos.map((pago) => ({
