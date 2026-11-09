@@ -13,7 +13,7 @@ test('Devoluciones does not call legacy endpoints while Supabase Auth is active'
  assert.match(page,/if \(ES_MODO_DEMO \|\| !sucursalId\) return/);
  assert.match(page,/if \(ES_SUPABASE_AUTH\) \{/);
  assert.match(page,/fetchSupabaseReturns\(sucursalId\)/);
- assert.match(page,/API antigua/);
+ assert.match(page,/if \(ES_SUPABASE_AUTH\) \{\s*setDevoluciones\(await fetchSupabaseReturns\(sucursalId\) as Devolucion\[\]\);\s*return;/);\n assert.match(page,/ES_SUPABASE_AUTH\s*\?\s*await fetchSupabaseReturnAvailability\(Number\(id\)\)/);\n assert.match(page,/ES_SUPABASE_AUTH\s*\?\s*await searchSupabaseReturnReceipts\(q, sucursalId\)/);
 });
 test('legacy flow remains available outside Supabase Auth mode',()=>{
  assert.match(page,/api\.post\(`\/devoluciones\/ventas\/\$\{disponibilidad\.comprobante\.id\}`/);
