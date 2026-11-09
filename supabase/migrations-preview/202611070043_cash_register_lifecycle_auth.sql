@@ -55,7 +55,7 @@ BEGIN
     ) cobro WHERE cobro.metodo_pago='EFECTIVO'
   ),0) + COALESCE((
     SELECT SUM(CASE WHEN cm.tipo='INGRESO' THEN cm.monto ELSE -cm.monto END)
-    FROM public.caja_movimiento cm WHERE cm.caja_id=c.id AND cm.usuario_id=v_usuario AND cm.metodo_pago='EFECTIVO'
+    FROM public.caja_movimiento cm WHERE cm.caja_id=c.id AND cm.usuario_id=v_usuario AND cm.metodo_pago='EFECTIVO' AND cm.devolucion_venta_id IS NULL
   ),0) - COALESCE((
     SELECT SUM(dp.monto) FROM public.devolucion_venta_pago dp
     JOIN public.devolucion_venta d ON d.id=dp.devolucion_id AND d.empresa_id=dp.empresa_id
@@ -109,7 +109,7 @@ BEGIN
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='YAPE'),0),
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='PLIN'),0)
  INTO v_mov_efectivo,v_mov_tarjeta,v_mov_yape,v_mov_plin
- FROM public.caja_movimiento WHERE caja_id=p_caja_id;
+ FROM public.caja_movimiento WHERE caja_id=p_caja_id AND devolucion_venta_id IS NULL;
  -- Los reembolsos se guardan en devolucion_venta_pago, no en caja_movimiento.
  SELECT
   COALESCE(SUM(dp.monto) FILTER(WHERE dp.metodo_pago='EFECTIVO'),0),
