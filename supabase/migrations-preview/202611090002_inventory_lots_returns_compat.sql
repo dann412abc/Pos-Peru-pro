@@ -29,6 +29,13 @@ ALTER TABLE public.compra_linea
   ADD COLUMN IF NOT EXISTS codigo_lote varchar(80),
   ADD COLUMN IF NOT EXISTS fecha_vencimiento date;
 
+-- Permitir varias variantes del mismo producto en una compra, sin duplicar la misma
+-- combinación producto/variante. NULL representa el producto sin variante.
+ALTER TABLE public.compra_linea
+  DROP CONSTRAINT IF EXISTS uq_compra_linea_producto;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante
+  ON public.compra_linea(compra_id,producto_id,COALESCE(variante_id,0));
+
 ALTER TABLE public.producto_variante_stock
   ADD COLUMN IF NOT EXISTS producto_id integer,
   ADD COLUMN IF NOT EXISTS costo_promedio numeric(12,4) NOT NULL DEFAULT 0;
