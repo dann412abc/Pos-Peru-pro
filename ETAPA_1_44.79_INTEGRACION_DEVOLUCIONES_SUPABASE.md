@@ -126,3 +126,24 @@ Se reforzó la ruta `POST /api/edge/purchases/receive` antes de invocar la RPC:
 Se amplió `purchases-receive.test.js` para cubrir líneas incompletas, medios de pago no permitidos y crédito con pagos iniciales. Los tests están escritos, pero **no se han ejecutado** en esta sesión.
 
 Importante: esta validación protege la frontera HTTP; no sustituye las validaciones SQL ni hace funcionar la recepción. La RPC `pos_compra_recibir_auth(jsonb)` sigue ausente en producción y no se creó ni aplicó migración SQL.
+
+## Avance — contrato de líneas de compra alineado con el esquema real
+
+La inspección de solo lectura de producción reveló que `compra_linea` tenía una restricción única antigua `UNIQUE(compra_id,producto_id)`. Esa regla impedía comprar dos variantes distintas del mismo producto en una sola compra, aunque el formulario permite seleccionar variantes.
+
+Cambios preparados únicamente en la rama preview:
+
+- La migración 002 elimina esa restricción y la reemplaza por unicidad de `(compra_id, producto_id, COALESCE(variante_id,0))`: permite variantes distintas, pero impide repetir la misma variante/producto en dos líneas.
+- La ruta Edge ahora acepta únicamente tipos IGV que la tabla real admite: 10, 20 o 30.
+- La ruta Edge rechaza líneas duplicadas de la misma combinación producto/variante antes de llamar a Supabase.
+- Se añadieron pruebas estáticas para esta regla y para los tipos IGV.
+
+### Implicación para la futura RPC
+
+La recepción debe escribir `compra_linea.cantidad` en unidades base, `costo_unitario` en costo por unidad base y, con la migración 002, conservar `cantidad_empaques`, `unidades_por_empaque`, `costo_empaque`, `unidad_compra`, `variante_id`, lote y vencimiento. El incremento de stock debe usar la misma cantidad base que el lote y el movimiento de inventario.
+
+El esquema actual de compras no contiene una tabla `cuenta_pagar`; el saldo de crédito se representa directamente en `compra.pagado` y `compra.saldo_pendiente`. La RPC no debe insertar en una tabla de cuentas por pagar inexistente.
+
+La caja no admite `TRANSFERENCIA` en `caja_movimiento`; las transferencias se guardan como `compra_pago` sin movimiento de caja física. Para EFECTIVO, YAPE, PLIN y TARJETA se requiere caja abierta válida y movimiento de tipo SALIDA.
+
+Estos cambios son preparación de contrato y esquema, no implementación de recepción. No se creó todavía `pos_compra_recibir_auth(jsonb)`; tampoco se ejecutaron tests ni migraciones en producción.
