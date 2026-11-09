@@ -19,6 +19,25 @@ function getBearer(request) {
   return match ? match[1] : null;
 }
 
+
+async function stockMovementRpcResponse(response, bodyText) {
+  let payload = null;
+  try { payload = JSON.parse(bodyText); } catch { /* preserve non-JSON PostgREST responses */ }
+  const detail = [payload?.message, payload?.details, payload?.hint, payload?.error]
+    .filter(value => typeof value === 'string').join(' ');
+  if (detail.includes('INVENTORY_COUNT_OPEN') ||
+      (payload?.code === '55000' && detail.toLowerCase().includes('physical count'))) {
+    return json({
+      error: 'INVENTORY_COUNT_OPEN',
+      message: 'Hay un inventario físico abierto en esta sucursal. Cierra el conteo antes de registrar ventas, compras, devoluciones o movimientos de stock.',
+    }, 409);
+  }
+  return new Response(bodyText, {
+    status: response.status,
+    headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] },
+  });
+}
+
 function validSupabaseConfig(env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
   try {
@@ -416,7 +435,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'INVENTORY_TRANSFER_MIGRATION_REQUIRED', message: 'La transferencia segura no está instalada en staging; no se modificó el inventario.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_TRANSFER_FORBIDDEN', message: 'No tienes permiso para transferir entre estas sucursales.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch { return json({ error: 'INVENTORY_TRANSFER_UNAVAILABLE', message: 'No se pudo confirmar la transferencia. Conserva la misma clave para reintentar.' }, 502); }
   }
 
@@ -446,7 +465,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'INVENTORY_ADJUSTMENT_MIGRATION_REQUIRED', message: 'Falta instalar el ajuste de inventario con lotes en el entorno de pruebas; no se modificó el stock.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_ADJUSTMENT_FORBIDDEN', message: 'No tienes permisos para ajustar este inventario.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch { return json({ error: 'INVENTORY_ADJUSTMENT_UNAVAILABLE', message: 'No se pudo registrar el ajuste.' }, 502); }
   }
 
@@ -562,7 +581,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'PURCHASE_MIGRATION_REQUIRED', message: 'La recepción transaccional aún no está instalada en staging; la compra no se registró.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'PURCHASE_FORBIDDEN', message: 'La sesión no tiene permiso para recibir compras en esta sucursal.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch { return json({ error: 'PURCHASES_UNAVAILABLE', message: 'No se pudo contactar con Supabase; no se confirmó la recepción.' }, 502); }
   }
 
@@ -796,7 +815,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'SALE_FEFO_MIGRATION_REQUIRED', message: 'La venta con control FEFO no está instalada en el entorno de pruebas; no se registró la venta.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'SALE_FORBIDDEN', message: 'La sesión no tiene autorización para registrar esta venta.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch {
       return json({ error: 'SALE_REGISTER_UNAVAILABLE', message: 'No se pudo confirmar la venta en Supabase. Conserva la misma clave para reintentar.' }, 502);
     }
@@ -849,7 +868,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'RETURN_REGISTER_NOT_INSTALLED', message: 'La RPC autenticada de devoluciones no está disponible en Supabase.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'RETURN_REGISTER_FORBIDDEN', message: 'La sesión no tiene autorización para registrar esta devolución.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch {
       return json({ error: 'RETURN_REGISTER_UNAVAILABLE', message: 'No se pudo confirmar la devolución en Supabase. Conserva la misma clave para reintentar.' }, 502);
     }
@@ -898,7 +917,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'INVENTORY_WASTE_MIGRATION_REQUIRED', message: 'El registro de mermas no está instalado en staging; no se modificó el stock.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_WASTE_FORBIDDEN', message: 'No tienes permiso para registrar mermas en esta sucursal.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch { return json({ error: 'INVENTORY_WASTE_UNAVAILABLE', message: 'No se pudo confirmar la merma. Conserva la misma clave para reintentar.' }, 502); }
   }
 
