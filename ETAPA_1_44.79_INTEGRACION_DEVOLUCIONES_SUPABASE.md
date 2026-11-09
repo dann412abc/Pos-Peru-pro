@@ -288,3 +288,25 @@ No se modificó la base de datos. No se fusionó PR ni se desplegó.
 Se endureció la validación dentro de SQL (no depender solo de Cloudflare): límite de serie/número, referencia de pago, código de lote, tipos IGV admitidos y bloqueo de la fila de variante seleccionada. También se corrigió el manejo de líneas base para no leer campos de un registro de variante inexistente. El primer pase bloquea productos/saldos en orden estable por producto y variante.
 
 La prueba estática ahora incluye estas comprobaciones adicionales. Se realizaron verificaciones de contenido/contrato sobre los archivos en GitHub; **no equivalen a ejecutar Node tests ni a compilar PL/pgSQL**. La compilación SQL y las pruebas de transacción/concurrencia siguen pendientes en staging.
+
+
+## Integración de venta con lotes FEFO — bloque 006
+
+Se preparó una capa transaccional para no dejar ventas nuevas descontando solo el stock agregado:
+
+- La migración preview 002 ahora añade `comprobante_lote_salida.comprobante_linea_id`, con FK a `comprobante_linea.id`. Esto permite repetir producto/variante en distintas líneas y devolver exactamente a los lotes consumidos por cada línea.
+- La RPC preview `pos_registrar_venta_fefo_auth(jsonb)` envuelve la RPC de venta existente. Reutiliza sus validaciones de precio, pago, caja, crédito y stock; después consume lotes por vencimiento más próximo (FEFO), bloquea las filas de lote y registra cada salida contra su línea.
+- Si no hay cantidad suficiente en lotes no vencidos, la función lanza error y la transacción revierte también la venta y los movimientos de stock/caja asociados.
+- La clave idempotente comparte el bloqueo de la RPC base. Un reintento idéntico devuelve la venta existente solo si ya tiene trazabilidad FEFO completa; no intenta reconstruir silenciosamente una venta histórica.
+- La RPC de devoluciones 003 ahora busca los lotes por `comprobante_linea_id`, por lo que ya no bloquea comprobantes que repiten el mismo producto/variante.
+
+Se añadió la ruta Cloudflare `POST /api/edge/sales/register`, que llama a la RPC autenticada de venta FEFO. La integración del cliente de ventas para utilizar esta ruta debe comprobarse antes de habilitar el flujo; no se considera que el frontend ya la esté invocando.
+
+### Validación y límites
+
+- Migración 006 y pruebas estáticas añadidas en la rama.
+- Migraciones 002/003 actualizadas para la trazabilidad exacta por línea.
+- No se ejecutó Node test, compilación PL/pgSQL ni prueba transaccional.
+- No se aplicó SQL a Supabase; producción sigue intacta.
+- La venta directa a `pos_registrar_venta(jsonb)` todavía puede eludir FEFO si algún cliente la invoca sin pasar por la nueva ruta. Antes de activar lotes en producción, el frontend debe migrar a `/api/edge/sales/register` y se debe cerrar el acceso de rutas alternativas no controladas.
+- Los movimientos de ajuste y transferencia de inventario aún requieren integración con lotes o bloqueo explícito cuando no puedan preservar su trazabilidad.
