@@ -41,7 +41,11 @@ describe('VentasService.anular - contrato de seguridad', () => {
   it('restaura stock y lotes dentro de la misma transacción y deja movimiento de auditoría', () => {
     expect(method).toMatch(/UPDATE producto_stock SET stock=stock\+\$1/);
     expect(method).toMatch(/UPDATE producto_variante_stock SET stock=stock\+\$1/);
-    expect(method).toContain('UPDATE inventario_lote SET cantidad_disponible=cantidad_disponible+$1');
+    expect(method).toContain('SET cantidad_disponible=cantidad_disponible+$1');
+    expect(method).toContain('AND cantidad_disponible+$1 <= cantidad_inicial');
+    expect(method).toContain('AND sucursal_id=$4');
+    expect(method).toContain('AND producto_id=$5');
+    expect(method).toContain('variante_id IS NOT DISTINCT FROM $6::int');
     expect(method).toContain("tipo: 'ENTRADA'");
     expect(method).toContain('Anulación');
   });
