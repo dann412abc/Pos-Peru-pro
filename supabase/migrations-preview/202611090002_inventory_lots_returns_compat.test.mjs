@@ -13,6 +13,13 @@ test('FEFO preview is additive and guarded by singular-model prerequisites',()=>
   assert.match(sql,/ADD COLUMN IF NOT EXISTS producto_id integer/);
 });
 
+test('lot exits retain exact comprobante line identity for repeated products',()=>{
+  assert.match(sql,/comprobante_linea_id integer/);
+  assert.match(sql,/fk_lote_salida_comprobante_linea/);
+  assert.match(sql,/REFERENCES public\\.comprobante_linea\\(id\\)/);
+  assert.match(sql,/idx_lote_salida_comprobante_linea/);
+});
+
 test('variant stock product link is backfilled and checked before use',()=>{
   assert.match(sql,/SET producto_id=pv\.producto_id/);
   assert.match(sql,/INVENTORY_VARIANT_STOCK_PRODUCT_LINK_MISSING/);
