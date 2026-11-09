@@ -18,7 +18,9 @@
     "test:sales:staging": "node --test ../supabase/tests/sales-transaction-staging.integration.test.mjs",
     "test:sales:static": "node --test ../supabase/migrations-preview/*.test.mjs ../supabase/tests/*.test.mjs",
     "test:purchases:staging": "node --test ../supabase/tests/purchase-receipt-staging.integration.test.mjs",
-    "test:purchases:static": "node --test ../supabase/migrations-preview/202611090005_purchase_receive_auth.test.mjs ../supabase/migrations-preview/202611090047_purchase_sales_lot_flow_contract.test.mjs ../supabase/tests/purchase-staging-harness.test.mjs"
+    "test:purchases:static": "node --test ../supabase/migrations-preview/202611090005_purchase_receive_auth.test.mjs ../supabase/migrations-preview/202611090047_purchase_sales_lot_flow_contract.test.mjs ../supabase/tests/purchase-staging-harness.test.mjs",
+    "test:returns:staging": "node --test ../supabase/tests/returns-transaction-staging.integration.test.mjs",
+    "test:returns:static": "node --test ../supabase/tests/returns-staging-harness.test.mjs ../supabase/tests/returns-transaction-staging.integration.test.mjs ../supabase/migrations-preview/202611090003_returns_register_fefo_auth.test.mjs ../supabase/migrations-preview/202611090012_returns_transactional_writer_auth.test.mjs"
   },
   "dependencies": {
     "@nestjs/bull": "^10.1.1",
