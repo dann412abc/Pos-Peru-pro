@@ -231,19 +231,19 @@ export default function CierreCaja() {
               <div className="text-[11px] text-gray-400 mt-1">Apertura: {new Date(caja.fechaApertura).toLocaleString('es-PE')}</div>
             </div>
             <div className="card p-4">
-              <div className="text-xs text-gray-500 uppercase font-semibold">Ventas del turno</div>
+              <div className="text-xs text-gray-500 uppercase font-semibold">Ventas netas del turno</div>
               <div className="text-2xl font-bold text-ambar-600 mt-1">{formatearMoneda(totalVentas)}</div>
               <div className="text-[11px] text-gray-400 mt-1">{cantidadVentas} comprobantes · devoluciones: {formatearMoneda(resumenServidor?.totalDevoluciones || 0)}</div>
             </div>
             <div className="card p-4">
               <div className="text-xs text-gray-500 uppercase font-semibold">Efectivo esperado en caja</div>
               <div className="text-2xl font-bold text-green-700 mt-1">{formatearMoneda(arqueoEsperado)}</div>
-              <div className="text-[11px] text-gray-400 mt-1">Saldo inicial + ventas en efectivo + movimientos</div>
+              <div className="text-[11px] text-gray-400 mt-1">Saldo inicial + cobros en efectivo + ingresos/egresos − reembolsos</div>
             </div>
           </div>
 
           <div className="card p-5">
-            <h3 className="font-semibold text-primario-700 mb-3">Ventas del día por método de pago</h3>
+            <h3 className="font-semibold text-primario-700 mb-3">Saldo neto del turno por medio de pago</h3>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {(Object.keys(porMetodo) as MetodoPago[]).map((m) => {
                 const Icono = metodoIcono[m];
