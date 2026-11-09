@@ -61,7 +61,7 @@ export default function Devoluciones() {
         api.get('/ventas', { params: { sucursalId } }),
         api.get('/devoluciones', { params: { sucursalId } }),
       ]);
-      setVentas((rVentas.data || []).filter((v: VentaResumen) => ['01', '03', 'NV'].includes(v.tipo) && v.estado !== 'ANULADA'));
+      setVentas((rVentas.data || []).filter((v: VentaResumen) => ['01', '03'].includes(v.tipo) && v.estado !== 'ANULADA'));
       setDevoluciones(rDevoluciones.data || []);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo cargar el historial de devoluciones');
@@ -117,7 +117,7 @@ export default function Devoluciones() {
       const response = ES_SUPABASE_AUTH
         ? await searchSupabaseReturnReceipts(q, sucursalId)
         : (await api.get('/devoluciones/ventas/buscar', { params: { q, sucursalId } })).data;
-      setVentas((response || []).filter((v: VentaResumen) => ['01', '03', 'NV'].includes(v.tipo) && v.estado !== 'ANULADA'));
+      setVentas((response || []).filter((v: VentaResumen) => ['01', '03'].includes(v.tipo) && v.estado !== 'ANULADA'));
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'No se pudo buscar el comprobante');
     } finally { setCargando(false); }
@@ -196,7 +196,7 @@ export default function Devoluciones() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-primario-700 flex items-center gap-2"><RotateCcw size={22} /> Devoluciones de clientes</h2>
-          <p className="text-sm text-gray-500">Devoluciones parciales o totales, reingreso de stock y reembolsos por medio de pago.</p>
+          <p className="text-sm text-gray-500">Devoluciones parciales o totales de boletas y facturas, con reingreso de stock y reembolsos por medio de pago.</p>
         </div>
         <div className="flex gap-2">
           <button className="btn-secundario flex items-center gap-2" onClick={recargar} disabled={cargando}><RefreshCw size={15} className={cargando ? 'animate-spin' : ''} /> Actualizar</button>
