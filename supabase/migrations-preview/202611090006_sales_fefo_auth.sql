@@ -75,7 +75,8 @@ BEGIN
   IF v_key IS NULL OR v_key !~ '^[A-Za-z0-9._:-]{8,100}$' THEN
     RAISE EXCEPTION 'SALE_IDEMPOTENCY_KEY_INVALID' USING ERRCODE='22023';
   END IF;
-  v_hash:=pg_catalog.md5(p_venta::text);
+  -- Match the transactional writer: hash business fields, not the idempotency key.
+  v_hash:=encode(sha256(convert_to((p_venta - 'idempotencyKey')::text,'UTF8')),'hex');
 
   -- Serialize retries with the exact lock namespace used by pos_registrar_venta.
   PERFORM pg_catalog.pg_advisory_xact_lock(
@@ -234,7 +235,8 @@ BEGIN
   IF v_key IS NULL OR v_key !~ '^[A-Za-z0-9._:-]{8,100}$' THEN
     RAISE EXCEPTION 'SALE_IDEMPOTENCY_KEY_INVALID' USING ERRCODE='22023';
   END IF;
-  v_hash:=pg_catalog.md5(p_payload::text);
+  -- Recovery must compare the same canonical fingerprint as the sale writer.
+  v_hash:=encode(sha256(convert_to((p_payload - 'idempotencyKey')::text,'UTF8')),'hex');
 
   SELECT c.id,c.sucursal_id,c.request_hash,c.tipo,c.serie,c.correlativo,
          c.total,c.estado,c.caja_id,c.fecha_emision
