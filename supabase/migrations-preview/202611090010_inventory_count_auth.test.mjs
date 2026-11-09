@@ -12,7 +12,7 @@ test('physical count migration creates protected header and line tables', () => 
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.inventario_conteo\s*\(/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.inventario_conteo_linea\s*\(/);
   assert.match(migration, /uq_inventario_conteo_abierto_sucursal/);
-  assert.match(migration, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(migration, /ENABLE ROW LEVEL SECURITY/);\n  assert.match(migration, /variante_id bigint,/);
 });
 
 test('physical count RPCs require auth and branch authorization', () => {
