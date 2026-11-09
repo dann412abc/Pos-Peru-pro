@@ -61,7 +61,7 @@ export default function Devoluciones() {
         api.get('/ventas', { params: { sucursalId } }),
         api.get('/devoluciones', { params: { sucursalId } }),
       ]);
-      setVentas((rVentas.data || []).filter((v: VentaResumen) => ['01', '03'].includes(v.tipo) && v.estado !== 'ANULADA'));
+      setVentas((rVentas.data || []).filter((v: VentaResumen) => ['01', '03', 'NV'].includes(v.tipo) && v.estado !== 'ANULADA'));
       setDevoluciones(rDevoluciones.data || []);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo cargar el historial de devoluciones');
