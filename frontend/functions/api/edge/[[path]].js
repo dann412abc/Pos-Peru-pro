@@ -663,7 +663,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'PURCHASE_RETURN_MIGRATION_REQUIRED', message: 'La devolución definitiva no está instalada en staging; no se modificó el inventario.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'PURCHASE_RETURN_FORBIDDEN', message: 'La sesión no tiene permiso para devolver esta compra.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch { return json({ error: 'PURCHASE_RETURN_UNAVAILABLE', message: 'No se pudo confirmar la devolución en Supabase.' }, 502); }
   }
 
@@ -687,7 +687,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'PURCHASE_CANCEL_MIGRATION_REQUIRED', message: 'La anulación segura no está instalada en staging; no se modificó la compra.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'PURCHASE_CANCEL_FORBIDDEN', message: 'La sesión no tiene permiso para anular esta compra.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch { return json({ error: 'PURCHASE_CANCEL_UNAVAILABLE', message: 'No se pudo confirmar la anulación en Supabase.' }, 502); }
   }
 
