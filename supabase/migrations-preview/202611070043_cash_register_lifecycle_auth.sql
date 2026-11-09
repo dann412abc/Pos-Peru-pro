@@ -110,7 +110,7 @@ BEGIN
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='PLIN'),0)
  INTO v_mov_efectivo,v_mov_tarjeta,v_mov_yape,v_mov_plin
  FROM public.caja_movimiento WHERE caja_id=p_caja_id AND devolucion_venta_id IS NULL;
- -- Los reembolsos se guardan en devolucion_venta_pago, no en caja_movimiento.
+ -- Los reembolsos también generan caja_movimiento; se excluyen aquí porque ya se netean desde devolucion_venta_pago.
  SELECT
   COALESCE(SUM(dp.monto) FILTER(WHERE dp.metodo_pago='EFECTIVO'),0),
   COALESCE(SUM(dp.monto) FILTER(WHERE dp.metodo_pago='TARJETA'),0),
