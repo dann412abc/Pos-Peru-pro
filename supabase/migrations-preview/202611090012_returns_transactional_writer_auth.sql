@@ -277,6 +277,10 @@ BEGIN
     WHERE id=v_cuenta.id AND empresa_id=v_empresa;
     UPDATE public.cliente SET saldo_credito=greatest(0,saldo_credito-v_credito)
     WHERE id=v_venta.cliente_id AND empresa_id=v_empresa;
+    IF v_cuenta.saldo_pendiente-v_credito<=0 THEN
+      UPDATE public.comprobante SET estado='PAGADA'
+      WHERE id=p_comprobante_id AND empresa_id=v_empresa AND estado='PENDIENTE';
+    END IF;
   END IF;
 
   FOR v_pago IN SELECT value FROM jsonb_array_elements(coalesce(p_pagos,'[]'::jsonb)) LOOP
