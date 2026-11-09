@@ -18,7 +18,7 @@ test('FEFO return traces original sale lots and prevents over-returning a lot',(
   assert.match(sql,/public\.devolucion_venta_lote/);
   assert.match(sql,/cls\.cantidad-COALESCE\(previo\.cantidad,0\)/);
   assert.match(sql,/dline\.comprobante_linea_id=v_linea_id/);
-  assert.match(sql,/TRAZABILIDAD_AMBIGUA/);
+  assert.match(sql,/cls\.comprobante_linea_id=v_linea_id/);
   assert.match(sql,/SELECT COUNT\(\) INTO v_origen_count/);
   assert.match(sql,/La trazabilidad original no cubre la cantidad a devolver/);
   assert.match(sql,/DEVCLIENTE-/);
