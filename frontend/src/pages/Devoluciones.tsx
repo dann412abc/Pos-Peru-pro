@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { api, ES_MODO_DEMO, ES_SUPABASE_AUTH } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatearMoneda } from '../utils/igv';
+import { fetchSupabaseReturns, searchSupabaseReturnReceipts, fetchSupabaseReturnAvailability, registerSupabaseReturn } from '../api/supabaseReturns';
 
 type VentaResumen = {
   id: number; tipo: string; serie: string; correlativo: number; total: number | string;
@@ -49,9 +50,13 @@ export default function Devoluciones() {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
 
   async function recargar() {
-    if (ES_MODO_DEMO || ES_SUPABASE_AUTH || !sucursalId) return;
+    if (ES_MODO_DEMO || !sucursalId) return;
     setCargando(true);
     try {
+      if (ES_SUPABASE_AUTH) {
+        setDevoluciones(await fetchSupabaseReturns(sucursalId) as Devolucion[]);
+        return;
+      }
       const [rVentas, rDevoluciones] = await Promise.all([
         api.get('/ventas', { params: { sucursalId } }),
         api.get('/devoluciones', { params: { sucursalId } }),
@@ -59,7 +64,7 @@ export default function Devoluciones() {
       setVentas((rVentas.data || []).filter((v: VentaResumen) => ['01', '03'].includes(v.tipo) && v.estado !== 'ANULADA'));
       setDevoluciones(rDevoluciones.data || []);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'No se pudo cargar el historial de devoluciones');
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo cargar el historial de devoluciones');
     } finally { setCargando(false); }
   }
 
@@ -71,10 +76,12 @@ export default function Devoluciones() {
     setSeleccion({});
     if (!id) return;
     try {
-      const r = await api.get(`/devoluciones/ventas/${id}/disponibilidad`);
-      setDisponibilidad(r.data);
+      const data = ES_SUPABASE_AUTH
+        ? await fetchSupabaseReturnAvailability(Number(id))
+        : (await api.get(`/devoluciones/ventas/${id}/disponibilidad`)).data;
+      setDisponibilidad(data);
       const inicial: Record<number, LineaSeleccion> = {};
-      (r.data.lineas || []).forEach((l: LineaDisponible) => {
+      (data.lineas || []).forEach((l: LineaDisponible) => {
         inicial[Number(l.comprobanteLineaId)] = {
           comprobanteLineaId: Number(l.comprobanteLineaId), cantidad: 0, reingresarStock: true,
         };
@@ -107,8 +114,10 @@ export default function Devoluciones() {
     if (q.length < 2) { await recargar(); return; }
     setCargando(true);
     try {
-      const response = await api.get('/devoluciones/ventas/buscar', { params: { q, sucursalId } });
-      setVentas((response.data || []).filter((v: VentaResumen) => ['01', '03'].includes(v.tipo) && v.estado !== 'ANULADA'));
+      const response = ES_SUPABASE_AUTH
+        ? await searchSupabaseReturnReceipts(q, sucursalId)
+        : (await api.get('/devoluciones/ventas/buscar', { params: { q, sucursalId } })).data;
+      setVentas((response || []).filter((v: VentaResumen) => ['01', '03'].includes(v.tipo) && v.estado !== 'ANULADA'));
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'No se pudo buscar el comprobante');
     } finally { setCargando(false); }
@@ -151,7 +160,11 @@ export default function Devoluciones() {
     }
     setGuardando(true);
     try {
-      await api.post(`/devoluciones/ventas/${disponibilidad.comprobante.id}`, { ...operacion.payload, idempotencyKey: operacion.clave });
+      if (ES_SUPABASE_AUTH) {
+        await registerSupabaseReturn(disponibilidad.comprobante.id, { ...operacion.payload, idempotencyKey: operacion.clave });
+      } else {
+        await api.post(`/devoluciones/ventas/${disponibilidad.comprobante.id}`, { ...operacion.payload, idempotencyKey: operacion.clave });
+      }
       localStorage.removeItem(claveStorage);
       toast.success('Devolución registrada correctamente');
       setVentaId(''); setDisponibilidad(null); setSeleccion({}); setMotivo(''); setReferencia('');
@@ -159,7 +172,7 @@ export default function Devoluciones() {
       await recargar();
     } catch (error: any) {
       const status = Number(error?.response?.status || 0);
-      if ([400, 401, 403, 404, 409, 422].includes(status)) localStorage.removeItem(claveStorage);
+      if (!ES_SUPABASE_AUTH && [400, 401, 403, 404, 409, 422].includes(status)) localStorage.removeItem(claveStorage);
       toast.error(error?.response?.data?.message || 'No se confirmó la devolución. Reintente con los mismos datos.');
     } finally { setGuardando(false); }
   }
@@ -174,11 +187,6 @@ export default function Devoluciones() {
     }
   }
 
-  if (ES_SUPABASE_AUTH) return <div className="card p-6 space-y-3">
-    <div className="flex items-center gap-2 text-amber-800 font-semibold"><AlertTriangle size={20} /> Módulo de devoluciones en migración a Supabase</div>
-    <p className="text-sm text-gray-600">La integración transaccional de devoluciones todavía está en preparación. Para proteger tus ventas, inventario, crédito y caja, esta versión no enviará operaciones de devolución a la API antigua ni registrará reembolsos parcialmente.</p>
-    <p className="text-sm text-gray-600">Se habilitará cuando estén listas y validadas las funciones autenticadas de consulta de comprobantes, disponibilidad, registro idempotente y nota de crédito en Supabase + Cloudflare.</p>
-  </div>;
   if (ES_MODO_DEMO) return <div className="card p-6 text-sm text-gray-600">Las devoluciones requieren conexión al backend y ejecutar la migración 0006.</div>;
   if (usuario?.rol !== 'ADMIN') return <div className="card p-6 text-sm text-gray-600">El registro de devoluciones está reservado al administrador.</div>;
 
@@ -250,7 +258,7 @@ export default function Devoluciones() {
 
       <div className="card overflow-hidden">
         <div className="px-4 py-3 border-b flex items-center justify-between"><h3 className="font-semibold text-primario-700">Historial de devoluciones</h3><span className="text-xs text-gray-500">Últimas 300 · Sucursal activa</span></div>
-        {devoluciones.length === 0 ? <div className="p-8 text-center text-sm text-gray-500"><PackageCheck size={30} className="mx-auto mb-2 text-gray-300" />Aún no hay devoluciones registradas.</div> : <div className="overflow-x-auto"><table className="w-full text-sm min-w-[900px]"><thead className="bg-gray-50 text-gray-500"><tr className="text-left"><th className="px-4 py-3">Fecha</th><th>Comprobante</th><th>Cliente</th><th>Motivo</th><th>Total</th><th>Crédito</th><th>Reembolso</th><th>Nota electrónica</th></tr></thead><tbody>{devoluciones.map((d) => <tr key={d.id} className="border-t"><td className="px-4 py-3 whitespace-nowrap">{new Date(d.createdAt).toLocaleString('es-PE', { timeZone: 'America/Lima' })}</td><td className="font-medium">{d.serie}-{String(d.correlativo).padStart(8, '0')}</td><td>{d.clienteNombre}</td><td className="max-w-[220px] truncate" title={d.motivo}>{d.motivo}</td><td className="font-semibold">{money(d.totalDevolucion)}</td><td>{money(d.creditoRevertido)}</td><td className="text-red-700">{money(d.montoReembolsado)}</td><td>{d.notaCreditoId ? <span className="text-emerald-700">{d.notaCreditoSerie}-{String(d.notaCreditoCorrelativo).padStart(8, '0')}</span> : <button className="text-xs text-primario-700 underline" onClick={() => emitirNotaCredito(d)}>Emitir nota de crédito</button>}</td></tr>)}</tbody></table></div>}
+        {devoluciones.length === 0 ? <div className="p-8 text-center text-sm text-gray-500"><PackageCheck size={30} className="mx-auto mb-2 text-gray-300" />Aún no hay devoluciones registradas.</div> : <div className="overflow-x-auto"><table className="w-full text-sm min-w-[900px]"><thead className="bg-gray-50 text-gray-500"><tr className="text-left"><th className="px-4 py-3">Fecha</th><th>Comprobante</th><th>Cliente</th><th>Motivo</th><th>Total</th><th>Crédito</th><th>Reembolso</th><th>Nota electrónica</th></tr></thead><tbody>{devoluciones.map((d) => <tr key={d.id} className="border-t"><td className="px-4 py-3 whitespace-nowrap">{new Date(d.createdAt).toLocaleString('es-PE', { timeZone: 'America/Lima' })}</td><td className="font-medium">{d.serie}-{String(d.correlativo).padStart(8, '0')}</td><td>{d.clienteNombre}</td><td className="max-w-[220px] truncate" title={d.motivo}>{d.motivo}</td><td className="font-semibold">{money(d.totalDevolucion)}</td><td>{money(d.creditoRevertido)}</td><td className="text-red-700">{money(d.montoReembolsado)}</td><td>{d.notaCreditoId ? <span className="text-emerald-700">{d.notaCreditoSerie}-{String(d.notaCreditoCorrelativo).padStart(8, '0')}</span> : ES_SUPABASE_AUTH ? <span className="text-xs text-gray-500">Emisión electrónica pendiente de integrar</span> : <button className="text-xs text-primario-700 underline" onClick={() => emitirNotaCredito(d)}>Emitir nota de crédito</button>}</td></tr>)}</tbody></table></div>}
       </div>
       <div className="text-xs text-gray-500 flex items-center gap-2"><Clock size={14} /> Reembolso en efectivo sujeto a saldo disponible en caja. Las cantidades y los importes finales se vuelven a validar en el servidor.</div>
     </div>
