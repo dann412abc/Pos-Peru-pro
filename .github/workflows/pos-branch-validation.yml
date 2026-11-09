@@ -68,6 +68,9 @@ jobs:
       - name: Test Supabase returns API adapter
         working-directory: frontend
         run: npx vitest run src/api/supabaseReturns.test.ts
+      - name: Test Supabase cash reconciliation adapter
+        working-directory: frontend
+        run: npx vitest run src/api/supabaseCash.test.ts
       - name: Type-check and build frontend
         working-directory: frontend
         run: npm run build
