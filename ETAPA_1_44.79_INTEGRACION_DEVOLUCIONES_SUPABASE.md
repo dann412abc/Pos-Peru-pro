@@ -244,7 +244,7 @@ Se inspeccionaron el DTO, el controlador y el método `crearCompra` del backend 
 
 ### Diferencia pendiente entre legacy y el contrato Edge actual
 
-El servicio legacy permite pagos parciales en una compra a crédito (solo impide que los pagos superen el total); el formulario/Edge Supabase actual rechaza pagos iniciales cuando `condicionPago='CREDITO'`. Esta diferencia debe resolverse explícitamente antes de implementar la RPC. Para no cambiar silenciosamente el comportamiento del sistema, la regla de negocio elegida debe quedar coordinada entre formulario, Edge y SQL. El backend legacy también exige pago íntegro para CONTADO.
+El servicio legacy permite pagos parciales en una compra a crédito (solo impide que los pagos superen el total); sin embargo, el formulario actual construye `pagos: []` para CREDITO y la ruta Edge rechaza pagos iniciales en esa condición. Para mantener el contrato que realmente presenta la interfaz, la RPC debe exigir cero pagos iniciales en CREDITO y pago íntegro en CONTADO. La capacidad legacy de abonos parciales queda en la RPC separada de pagos posteriores (`pos_compra_pago_auth`), no en la recepción. Esta diferencia queda documentada para evitar reintroducir pagos iniciales de crédito por copiar el servicio antiguo.
 
 ### Riesgo separado en recepción parcial de órdenes
 
