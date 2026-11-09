@@ -31,6 +31,9 @@ ALTER TABLE public.compra_linea
 
 -- Permitir varias variantes del mismo producto en una compra, sin duplicar la misma
 -- combinación producto/variante. NULL representa el producto sin variante.
+-- En producción el objeto antiguo es un índice único, no una constraint.
+-- DROP CONSTRAINT no lo elimina; quitar el índice real antes de crear el nuevo.
+DROP INDEX IF EXISTS public.uq_compra_linea_producto;
 ALTER TABLE public.compra_linea
   DROP CONSTRAINT IF EXISTS uq_compra_linea_producto;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante
