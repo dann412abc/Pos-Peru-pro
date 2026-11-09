@@ -725,17 +725,27 @@ export class VentasService {
              AND variante_id IS NOT DISTINCT FROM $4::int FOR UPDATE`,
           [empresaId, c.id, productoId, varianteId],
         );
-        if (asignaciones.length) {
-          for (const a of asignaciones) {
-            await manager.query('UPDATE inventario_lote SET cantidad_disponible=cantidad_disponible+$1 WHERE id=$2', [a.cantidad, a.lote_id]);
-          }
-        } else {
-          await manager.query(
-            `INSERT INTO inventario_lote
-              (empresa_id,sucursal_id,producto_id,variante_id,codigo_lote,fecha_vencimiento,cantidad_inicial,cantidad_disponible,costo_unitario)
-             VALUES($1,$2,$3,$4,$5,NULL,$6,$6,0)`,
-            [empresaId, c.sucursalId, productoId, varianteId, `ANULACION-${c.id}-${varianteId || productoId}`, cantidad],
+        if (!asignaciones.length) {
+          throw new BadRequestException(
+            `No se puede anular: la venta ${c.serie}-${c.correlativo} no tiene trazabilidad de lotes para ${varianteId ? `la variante ${varianteId}` : `el producto ${productoId}`}. Se requiere regularización de inventario.`,
           );
+        }
+        const cantidadAsignada = asignaciones.reduce((sum, a) => sum + Number(a.cantidad), 0);
+        if (Math.abs(cantidadAsignada - cantidad) > 0.0005) {
+          throw new BadRequestException('No se puede anular: las cantidades de lotes no coinciden con las líneas de venta.');
+        }
+        for (const a of asignaciones) {
+          const lote = await manager.query(
+            `UPDATE inventario_lote
+             SET cantidad_disponible=cantidad_disponible+$1
+             WHERE id=$2 AND empresa_id=$3 AND sucursal_id=$4
+               AND producto_id=$5 AND variante_id IS NOT DISTINCT FROM $6::int
+             RETURNING id`,
+            [a.cantidad, a.lote_id, empresaId, c.sucursalId, productoId, varianteId],
+          );
+          if (!lote.length) {
+            throw new BadRequestException('No se puede anular: uno de los lotes originales ya no existe o no corresponde a esta venta.');
+          }
         }
         await manager.getRepository(MovimientoInventario).save({
           empresaId, sucursalId: c.sucursalId, productoId, varianteId,
