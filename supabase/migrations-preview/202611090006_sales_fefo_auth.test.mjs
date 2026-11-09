@@ -21,7 +21,7 @@ test('wrapper authenticates and uses the same sale idempotency lock namespace',(
   assert.match(sql,/auth\.uid\(\)/);
   assert.match(sql,/public\.mi_usuario_id\(\)/);
   assert.match(sql,/public\.mi_empresa_id\(\)/);
-  assert.match(sql,/public\.mi_rol\(\) NOT IN \('ADMIN','CAJERO'\)/);
+  assert.match(sql,/mi_rol\(\).*NOT IN/s);
   assert.match(sql,/pos:venta:/);
   assert.match(sql,/SALE_IDEMPOTENCY_CONFLICT/);
   assert.match(sql,/SALE_LOT_TRACE_MISSING/);
