@@ -219,6 +219,8 @@ BEGIN
 END;
 $function$;
 
+-- Impide que el cliente autenticado eluda la trazabilidad usando la RPC antigua.
+REVOKE ALL ON FUNCTION public.pos_ajustar_inventario(integer,integer,character varying,numeric,character varying) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.pos_inventario_ajustar_lote_auth(jsonb) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.pos_inventario_ajustar_lote_auth(jsonb) TO authenticated;
 
