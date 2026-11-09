@@ -114,11 +114,29 @@ BEGIN
       CONTINUE;
     END IF;
 
-    v_pendiente:=v_cantidad;
-    v_origen_count:=0;
+    -- El esquema actual no vincula cada salida de lote con una línea concreta.
+    -- Si el comprobante repite producto/variante, no se puede asignar FEFO por línea
+    -- sin ambigüedad: bloquear en vez de reutilizar cantidades entre líneas.
+    IF (
+      SELECT COUNT(*) FROM public.comprobante_linea clx
+      WHERE clx.comprobante_id=p_comprobante_id
+        AND clx.producto_id=v_producto_id
+        AND clx.variante_id IS NOT DISTINCT FROM v_variante_id
+    ) > 1 THEN
+      RAISE EXCEPTION 'TRAZABILIDAD_AMBIGUA: el comprobante repite producto/variante; requiere vínculo de lote por línea'
+        USING ERRCODE='23514';
+    END IF;
 
-    -- Devuelve cantidades a los mismos lotes consumidos en la venta.
-    -- Descuenta lo ya restituido en devoluciones anteriores del mismo comprobante.
+    v_pendiente:=v_cantidad;
+    SELECT COUNT(*) INTO v_origen_count
+    FROM public.comprobante_lote_salida cls
+    WHERE cls.empresa_id=v_empresa
+      AND cls.comprobante_id=p_comprobante_id
+      AND cls.producto_id=v_producto_id
+      AND cls.variante_id IS NOT DISTINCT FROM v_variante_id;
+
+    -- Devuelve solo a lotes consumidos por esta línea. Los registros de otras
+    -- líneas nunca reducen el saldo restituible de la línea actual.
     FOR v_lote IN
       SELECT cls.lote_id,
              GREATEST(0,cls.cantidad-COALESCE(previo.cantidad,0))::numeric(12,3) AS disponible_devolver
@@ -132,6 +150,7 @@ BEGIN
         JOIN public.devolucion_venta_linea dline ON dline.id=dvl.devolucion_linea_id
         JOIN public.devolucion_venta dv ON dv.id=dline.devolucion_id
         WHERE dvl.lote_id=cls.lote_id
+          AND dline.comprobante_linea_id=v_linea_id
           AND dv.comprobante_id=p_comprobante_id
           AND dv.empresa_id=v_empresa
           AND dv.estado='REGISTRADA'
@@ -145,7 +164,6 @@ BEGIN
       ORDER BY cls.id
       FOR UPDATE OF cls,il
     LOOP
-      v_origen_count:=v_origen_count+1;
       EXIT WHEN v_pendiente<=0.0005;
       v_tomar:=LEAST(v_pendiente,v_lote.disponible_devolver);
       IF v_tomar<=0 THEN CONTINUE; END IF;
