@@ -21,7 +21,7 @@ export class DevolucionesVentas1700000000006 implements MigrationInterface {
         empresa_id INTEGER NOT NULL REFERENCES empresa(id) ON DELETE CASCADE,
         sucursal_id INTEGER NOT NULL,
         comprobante_id INTEGER NOT NULL,
-        cliente_id INTEGER NOT NULL,
+        cliente_id INTEGER,
         usuario_id INTEGER NOT NULL REFERENCES usuario(id) ON DELETE RESTRICT,
         caja_id INTEGER NOT NULL,
         motivo VARCHAR(500) NOT NULL,
