@@ -78,7 +78,6 @@ BEGIN
  IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
  IF p_caja_id IS NULL OR p_caja_id<=0 OR p_efectivo_contado IS NULL OR p_efectivo_contado<0 OR p_efectivo_contado<>round(p_efectivo_contado,2)
     OR COALESCE(jsonb_typeof(p_arqueo),'null')<>'array' THEN RAISE EXCEPTION 'CASH_CLOSE_INPUT_INVALID' USING ERRCODE='22023'; END IF;
- -- El efectivo se informa en p_efectivo_contado; el array solo admite los otros medios.
  FOR v_item IN SELECT value FROM jsonb_array_elements(p_arqueo) LOOP
   IF jsonb_typeof(v_item)<>'object'
      OR EXISTS(SELECT 1 FROM jsonb_object_keys(v_item) AS keys(key) WHERE key NOT IN ('metodoPago','montoContado'))
@@ -88,15 +87,8 @@ BEGIN
   v_item_metodo:=v_item->>'metodoPago';
   IF v_item_metodo NOT IN ('TARJETA','YAPE','PLIN')
      OR jsonb_typeof(v_item->'montoContado')<>'number'
-     OR COALESCE(v_item->>'montoContado','') !~ '^[0-9]+(\.[0-9]{1,2})?$' THEN
-   RAISE EXCEPTION 'CASH_CLOSE_COUNT_INVALID' USING ERRCODE='22023';
-  END IF;
-  v_item_monto:=(v_item->>'montoContado')::numeric;
-  IF v_item_monto<0 OR v_item_monto<>round(v_item_monto,2)
-     OR (SELECT COUNT(*) FROM jsonb_array_elements(p_arqueo) x WHERE x->>'metodoPago'=v_item_metodo)>1 THEN
-   RAISE EXCEPTION 'CASH_CLOSE_COUNT_INVALID' USING ERRCODE='22023';
-  END IF;
- END LOOP;
+     OR COALESCE(v_item->>'montoContado','') !~ '^[0-9]+(\.[0-9]{1,2})?
+ SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE auth_user_id=v_auth AND activo=true;
  IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
  SELECT c.* INTO v_caja FROM public.caja c JOIN public.sucursal s ON s.id=c.sucursal_id
  JOIN public.usuario_sucursal us ON us.sucursal_id=c.sucursal_id AND us.usuario_id=v_usuario
@@ -156,7 +148,8 @@ COMMIT;
    RAISE EXCEPTION 'CASH_CLOSE_COUNT_INVALID' USING ERRCODE='22023';
   END IF;
   v_item_monto:=(v_item->>'montoContado')::numeric;
-  IF v_item_monto<0 OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_arqueo) x WHERE x->>'metodoPago'=v_item_metodo GROUP BY x->>'metodoPago' HAVING COUNT(*)>1) THEN
+  IF v_item_monto<0 OR v_item_monto<>round(v_item_monto,2)
+     OR (SELECT COUNT(*) FROM jsonb_array_elements(p_arqueo) x WHERE x->>'metodoPago'=v_item_metodo)>1 THEN
    RAISE EXCEPTION 'CASH_CLOSE_COUNT_INVALID' USING ERRCODE='22023';
   END IF;
  END LOOP;
