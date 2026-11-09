@@ -68,7 +68,7 @@ export default function Devoluciones() {
     } finally { setCargando(false); }
   }
 
-  useEffect(() => { if (!ES_SUPABASE_AUTH) recargar(); }, [sucursalId]);
+  useEffect(() => { recargar(); }, [sucursalId]);
 
   async function seleccionarVenta(id: string) {
     setVentaId(id);
