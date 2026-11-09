@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS public.inventario_conteo_linea (
   empresa_id integer NOT NULL,
   sucursal_id integer NOT NULL,
   producto_id integer NOT NULL,
-  variante_id integer,
+  variante_id bigint,
   codigo varchar(80),
   producto_nombre varchar(200) NOT NULL,
   variante_nombre varchar(120),
@@ -78,6 +78,7 @@ DECLARE v_uid uuid:=auth.uid(); v_usuario integer:=public.mi_usuario_id();
         v_empresa integer:=public.mi_empresa_id(); v_result jsonb;
 BEGIN
   IF v_uid IS NULL OR v_usuario IS NULL OR v_empresa IS NULL THEN RAISE EXCEPTION 'INVENTORY_AUTH_REQUIRED'; END IF;
+  IF public.mi_rol() IS DISTINCT FROM 'ADMIN' THEN RAISE EXCEPTION 'INVENTORY_ADMIN_REQUIRED'; END IF;
   SELECT jsonb_build_object(
     'id',c.id,'sucursalId',c.sucursal_id,'sucursalNombre',s.nombre,'estado',c.estado,
     'observacion',c.observacion,'totalLineas',c.total_lineas,'lineasContadas',c.lineas_contadas,
@@ -105,6 +106,7 @@ DECLARE v_uid uuid:=auth.uid(); v_usuario integer:=public.mi_usuario_id();
         v_empresa integer:=public.mi_empresa_id(); v_result jsonb;
 BEGIN
   IF v_uid IS NULL OR v_usuario IS NULL OR v_empresa IS NULL THEN RAISE EXCEPTION 'INVENTORY_AUTH_REQUIRED'; END IF;
+  IF public.mi_rol() IS DISTINCT FROM 'ADMIN' THEN RAISE EXCEPTION 'INVENTORY_ADMIN_REQUIRED'; END IF;
   SELECT coalesce(jsonb_agg(jsonb_build_object(
     'id',c.id,'sucursalId',c.sucursal_id,'sucursalNombre',s.nombre,'estado',c.estado,
     'observacion',c.observacion,'totalLineas',c.total_lineas,'lineasContadas',c.lineas_contadas,
