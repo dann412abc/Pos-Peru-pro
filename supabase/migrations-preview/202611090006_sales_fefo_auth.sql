@@ -284,6 +284,8 @@ GRANT EXECUTE ON FUNCTION public.pos_venta_idempotencia_consultar_auth(jsonb) TO
 COMMENT ON FUNCTION public.pos_venta_idempotencia_consultar_auth(jsonb) IS
   'PREVIEW: read-only sale recovery; confirms only matching payloads with complete FEFO line trace.';
 
+-- Prevent authenticated clients from bypassing FEFO through the legacy entry point.
+REVOKE ALL ON FUNCTION public.pos_registrar_venta(jsonb) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.pos_registrar_venta_fefo_auth(jsonb) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.pos_registrar_venta_fefo_auth(jsonb) TO authenticated;
 COMMENT ON FUNCTION public.pos_registrar_venta_fefo_auth(jsonb) IS
