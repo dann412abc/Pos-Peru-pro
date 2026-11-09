@@ -19,6 +19,17 @@ describe('VentasService.anular - contrato de seguridad', () => {
     expect(method).toContain('No se puede anular por el flujo simple');
   });
 
+  it('detiene un segundo intento antes de caja, stock, lotes y reembolso', () => {
+    const yaAnulada = method.indexOf("if (c.estado === EstadoComprobanteEnum.ANULADA)");
+    const caja = method.indexOf('cajaReembolso = await');
+    const stock = method.indexOf('const cantidadesDevueltas');
+    const lotes = method.indexOf('UPDATE inventario_lote');
+    const reembolso = method.indexOf("tipo: 'SALIDA'");
+    expect(yaAnulada).toBeGreaterThan(-1);
+    expect([caja, stock, lotes, reembolso].every((pos) => pos > yaAnulada)).toBe(true);
+    expect(method).toContain("lock: { mode: 'pessimistic_write' }");
+  });
+
   it('bloquea la caja antes de modificar inventario cuando hay reembolsos', () => {
     const caja = method.indexOf('cajaReembolso = await');
     const inventario = method.indexOf('const cantidadesDevueltas');
