@@ -116,9 +116,20 @@ export async function registerSupabaseReturn(
       new Set(pagos.map(x => x.metodoPago)).size !== pagos.length) {
     throw new Error('Los medios o importes del reembolso no son válidos.');
   }
-  const response = await axios.post('/api/edge/returns/register', {
-    comprobanteId, motivo, idempotencyKey: key, lineas: payload.lineas, pagos,
-  }, { headers: authHeaders(), timeout: 45000 });
+  let response;
+  try {
+    response = await axios.post('/api/edge/returns/register', {
+      comprobanteId, motivo, idempotencyKey: key, lineas: payload.lineas, pagos,
+    }, { headers: authHeaders(), timeout: 45000 });
+  } catch (error: any) {
+    const data = error?.response?.data;
+    const message = [data?.message, data?.details, data?.hint, data?.error, data?.error_description]
+      .filter(value => typeof value === 'string').join(' ');
+    if (data?.error === 'INVENTORY_COUNT_OPEN' || message.includes('INVENTORY_COUNT_OPEN')) {
+      throw new Error('Hay un inventario físico abierto en esta sucursal. Cierra el conteo antes de registrar la devolución; conserva la misma clave para reintentar.');
+    }
+    throw error;
+  }
   const result = response.data;
   if (!result || !Number.isSafeInteger(Number(result.id)) || Number(result.id) <= 0 ||
       Number(result.comprobanteId) !== comprobanteId ||
