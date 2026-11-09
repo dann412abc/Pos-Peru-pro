@@ -16,6 +16,8 @@ test('return read RPC migration scopes data to authenticated POS admin and assig
 test('return read RPCs expose history and receipt search without write statements',()=>{
   assert.match(sql,/pos_devoluciones_listar_auth/);
   assert.match(sql,/pos_devoluciones_buscar_auth/);
+  assert.match(sql,/c\.tipo IN \('01','03','NV'\)/);
+  assert.doesNotMatch(sql,/nc\.devolucion_venta_id/);
   assert.doesNotMatch(sql,/\b(INSERT|UPDATE|DELETE|TRUNCATE)\s+public\./i);
 });
 
