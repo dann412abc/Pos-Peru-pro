@@ -41,7 +41,7 @@ function mapCaja(caja: any): Caja {
     fechaApertura: String(caja?.fechaApertura ?? caja?.fecha_apertura ?? new Date().toISOString()),
     fechaCierre: caja?.fechaCierre ?? caja?.fecha_cierre ?? undefined,
     saldoInicial: Number(caja?.saldoInicial ?? caja?.saldo_inicial ?? 0),
-    estado: estado === 'abierta' || estado === 'open' || estado === 'abi er ta'.replace(/ /g, '') ? 'Abierta' : 'Cerrada',
+    estado: estado === 'abierta' || estado === 'open' ? 'Abierta' : 'Cerrada',
     usuarioId: String(caja?.usuarioId ?? caja?.usuario_id ?? ''),
     sucursalId: String(caja?.sucursalId ?? caja?.sucursal_id ?? ''),
   };
