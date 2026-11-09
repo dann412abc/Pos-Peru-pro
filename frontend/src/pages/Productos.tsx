@@ -8,7 +8,7 @@ import Modal from '../components/ui/Modal';
 import type { Producto, TipoIgv } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { fetchCurrentSupabaseCatalog, mapSupabaseProductRows, mutateSupabaseCatalog, mutateSupabaseVariant } from '../api/supabaseCatalog';
-import { registrarAjusteInventarioSupabase } from '../api/supabaseInventory';
+import { registrarAjusteInventarioSupabase, transferirInventarioSupabase } from '../api/supabaseInventory';
 
 type Variante = {
   id?: number; productoId?: number; codigo: string; codigoBarras?: string | null;
@@ -295,13 +295,23 @@ export default function Productos() {
       return;
     }
     try {
-      await api.post('/inventario/transferencias', {
-        sucursalOrigenId: Number(usuario.sucursalId),
-        sucursalDestinoId: Number(sucursalDestino),
-        lineas: [{ productoId: productoTransferencia.id, cantidad }],
-        motivo: motivoTransferencia.trim(),
-        idempotencyKey: claveTransferencia,
-      });
+      if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
+        await transferirInventarioSupabase({
+          sucursalOrigenId: Number(usuario.sucursalId),
+          sucursalDestinoId: Number(sucursalDestino),
+          lineas: [{ productoId: Number(productoTransferencia.id), cantidad }],
+          motivo: motivoTransferencia.trim(),
+          idempotencyKey: claveTransferencia,
+        });
+      } else {
+        await api.post('/inventario/transferencias', {
+          sucursalOrigenId: Number(usuario.sucursalId),
+          sucursalDestinoId: Number(sucursalDestino),
+          lineas: [{ productoId: productoTransferencia.id, cantidad }],
+          motivo: motivoTransferencia.trim(),
+          idempotencyKey: claveTransferencia,
+        });
+      }
       toast.success('Transferencia registrada. Se descontó el origen y se abonó el destino.');
       setProductoTransferencia(null);
       await recargar();
@@ -324,7 +334,18 @@ export default function Productos() {
     if(!destinoVariante || !Number.isFinite(cantidad) || cantidad<=0 || Math.round(cantidad*1000)!==cantidad*1000 || cantidad>Number(varianteTransferencia.stock||0)) { toast.error('Revise destino y cantidad disponible de la presentación'); return; }
     if(motivoVarianteTransferencia.trim().length<5){toast.error('Indique un motivo de al menos 5 caracteres');return;}
     try {
-      await api.post('/inventario/transferencias/variantes',{sucursalOrigenId:Number(usuario.sucursalId),sucursalDestinoId:Number(destinoVariante),varianteId:varianteTransferencia.id,cantidad,motivo:motivoVarianteTransferencia.trim(),idempotencyKey:claveVarianteTransferencia});
+      if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
+        if (!varianteTransferencia.productoId) throw new Error('No se pudo identificar el producto de la presentación.');
+        await transferirInventarioSupabase({
+          sucursalOrigenId: Number(usuario.sucursalId),
+          sucursalDestinoId: Number(destinoVariante),
+          lineas: [{ productoId: Number(varianteTransferencia.productoId), varianteId: Number(varianteTransferencia.id), cantidad }],
+          motivo: motivoVarianteTransferencia.trim(),
+          idempotencyKey: claveVarianteTransferencia,
+        });
+      } else {
+        await api.post('/inventario/transferencias/variantes',{sucursalOrigenId:Number(usuario.sucursalId),sucursalDestinoId:Number(destinoVariante),varianteId:varianteTransferencia.id,cantidad,motivo:motivoVarianteTransferencia.trim(),idempotencyKey:claveVarianteTransferencia});
+      }
       toast.success('Presentación transferida. Se conservaron sus lotes y costo.'); setVarianteTransferencia(null);
       if(productoVariantes) await abrirVariantes(productoVariantes); await recargarTransferencias();
     } catch(error:any){toast.error(error?.response?.data?.message||error?.message||'No se pudo transferir la presentación');}
