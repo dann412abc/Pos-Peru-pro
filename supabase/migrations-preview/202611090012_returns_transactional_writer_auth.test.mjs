@@ -33,3 +33,8 @@ test('partial return value calculation only aggregates already-registered return
  assert.match(sql,/sum\(dl\.monto\) FILTER \(WHERE d\.id IS NOT NULL\)/);
  assert.match(sql,/sum\(dl\.cantidad\) FILTER \(WHERE d\.id IS NOT NULL\)/);
 });
+
+test('fully reversed receivable also synchronizes the original receipt state',()=>{
+ assert.match(sql,/UPDATE public\.comprobante SET estado='PAGADA'/);
+ assert.match(sql,/v_cuenta\.saldo_pendiente-v_credito<=0/);
+});
