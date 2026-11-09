@@ -30,6 +30,24 @@ describe('VentasService.anular - contrato de seguridad', () => {
     expect(method).toContain("lock: { mode: 'pessimistic_write' }");
   });
 
+  it('impide anular comprobantes con devoluciones registradas antes de tocar stock o lotes', () => {
+    const devoluciones = method.indexOf('const devolucionesPrevias');
+    const inventario = method.indexOf('const cantidadesDevueltas');
+    expect(devoluciones).toBeGreaterThan(-1);
+    expect(inventario).toBeGreaterThan(devoluciones);
+    expect(method).toContain("estado='REGISTRADA'");
+    expect(method).toContain('devolucionesPrevias.length');
+  });
+
+  it('serializa anulación y devolución bloqueando el mismo comprobante', () => {
+    const returnsSource = readFileSync(join(__dirname, '../devoluciones/devoluciones.service.ts'), 'utf8');
+    const startReturn = returnsSource.indexOf('async registrar(');
+    const returnMethod = returnsSource.slice(startReturn);
+    expect(method).toContain("lock: { mode: 'pessimistic_write' }");
+    expect(returnMethod).toContain('FROM comprobante c WHERE c.id=$1 AND c.empresa_id=$2 AND c.sucursal_id=ANY($3::int[]) FOR UPDATE');
+    expect(returnMethod).toContain("if (venta.estado === 'ANULADA')");
+  });
+
   it('bloquea la caja antes de modificar inventario cuando hay reembolsos', () => {
     const caja = method.indexOf('cajaReembolso = await');
     const inventario = method.indexOf('const cantidadesDevueltas');
