@@ -51,3 +51,20 @@ La RPC de recepción bloquea por empresa y clave idempotente y compara el hash d
 2. Diseñar la relación `comprobante_lote_salida.comprobante_linea_id` y las restricciones compuestas compatibles con las claves reales.
 3. Corregir migraciones/tests en la rama de trabajo.
 4. Ejecutar pruebas reales en staging solo después de autorización expresa.
+
+
+## Bloque siguiente identificado — movimientos de inventario, mermas y transferencias
+
+La inspección de solo lectura de las RPC y de las pantallas frontend detectó otro bloqueo de integración que debe cerrarse antes de declarar completo el circuito de inventario:
+
+- `pos_ajustar_inventario` cambia `producto_stock` y registra `movimiento_inventario`, pero no crea ni consume filas de `inventario_lote` y no tiene clave idempotente.
+- `pos_transferir_inventario` cambia stock de origen/destino y registra movimientos, pero no mueve cantidades entre lotes ni conserva vencimiento/costo por lote. Su contrato actual solo recibe `productoId`, no variantes.
+- La pantalla `Productos.tsx` sigue llamando a `/inventario/movimientos`, `/inventario/transferencias` y `/inventario/transferencias/variantes`.
+- `Mermas.tsx` llama a `/inventario/mermas`; `ConteoFisico.tsx` utiliza rutas de conteo. Estas rutas no aparecen como operaciones migradas en el Edge actual, cuyo fallback responde 501 para rutas no migradas.
+- No se encontró una RPC pública específica para transferir variantes en el proyecto Supabase consultado.
+
+### Decisión de integración
+
+No se debe habilitar en el modo Supabase un ajuste o transferencia que modifique el stock agregado sin mover los lotes correspondientes. El siguiente bloque debe preparar RPC autenticadas e idempotentes para ajuste, merma, conteo y transferencia; para transferencia se deben crear lotes de destino conservando código, vencimiento y costo, y mantener la relación entre movimientos de origen/destino y lotes. Las variantes requieren un contrato separado o una extensión explícita del modelo.
+
+No se aplicaron cambios en producción. Este hallazgo no invalida la rama de venta FEFO, pero sí impide declarar completo el módulo de inventario hasta integrar estas operaciones.
