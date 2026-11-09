@@ -16,7 +16,7 @@ test('FEFO preview is additive and guarded by singular-model prerequisites',()=>
 test('lot exits retain exact comprobante line identity for repeated products',()=>{
   assert.match(sql,/comprobante_linea_id integer/);
   assert.match(sql,/fk_lote_salida_comprobante_linea/);
-  assert.match(sql,/REFERENCES public\\.comprobante_linea\\(id\\)/);
+  assert.ok(sql.includes('REFERENCES public.comprobante_linea(id)'));
   assert.match(sql,/idx_lote_salida_comprobante_linea/);
 });
 
