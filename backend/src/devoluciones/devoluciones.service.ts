@@ -116,7 +116,7 @@ export class DevolucionesService {
               c.tipo,c.serie,c.correlativo,cl.nombre AS "clienteNombre",u.nombre AS responsable
        FROM devolucion_venta d
        INNER JOIN comprobante c ON c.id=d.comprobante_id AND c.empresa_id=d.empresa_id
-       INNER JOIN cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
+       LEFT JOIN cliente cl ON cl.id=d.cliente_id AND cl.empresa_id=d.empresa_id
        INNER JOIN usuario u ON u.id=d.usuario_id AND u.empresa_id=d.empresa_id
        WHERE d.id=$1 AND d.empresa_id=$2 AND d.sucursal_id=ANY($3::int[])`, [id, empresaId, ids],
     );
