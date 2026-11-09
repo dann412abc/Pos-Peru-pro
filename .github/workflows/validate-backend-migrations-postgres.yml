@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "backend/src/database/migrations/**"
+      - "backend/src/**"
       - "backend/src/database/data-source.ts"
       - "backend/src/database/run-migrations.ts"
       - "backend/package.json"
