@@ -281,3 +281,10 @@ Ajuste de integración: `frontend/functions/api/edge/[[path]].js` limita pagos a
 6. La migración depende de 002 y 004; no aplicar por separado ni en producción.
 
 No se modificó la base de datos. No se fusionó PR ni se desplegó.
+
+
+### Revisión adicional del borrador 005
+
+Se endureció la validación dentro de SQL (no depender solo de Cloudflare): límite de serie/número, referencia de pago, código de lote, tipos IGV admitidos y bloqueo de la fila de variante seleccionada. También se corrigió el manejo de líneas base para no leer campos de un registro de variante inexistente. El primer pase bloquea productos/saldos en orden estable por producto y variante.
+
+La prueba estática ahora incluye estas comprobaciones adicionales. Se realizaron verificaciones de contenido/contrato sobre los archivos en GitHub; **no equivalen a ejecutar Node tests ni a compilar PL/pgSQL**. La compilación SQL y las pruebas de transacción/concurrencia siguen pendientes en staging.
