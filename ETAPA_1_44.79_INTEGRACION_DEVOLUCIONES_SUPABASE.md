@@ -251,3 +251,33 @@ El servicio legacy permite pagos parciales en una compra a crédito (solo impide
 El flujo legacy `recepcionarOrdenCompra` registra primero la compra mediante `crearCompra` y actualiza la orden en una segunda transacción. La preconsulta de idempotencia también ocurre fuera de una transacción. Por ello no es un patrón seguro para copiar en Supabase: la futura recepción de orden debe bloquear la orden/líneas, verificar la clave idempotente y crear compra, lotes, stock, pagos y avance de cantidades/estado en una sola transacción.
 
 Este bloque es inspección de código y diseño del contrato. No se creó aún `pos_compra_recibir_auth(jsonb)`, no se ejecutaron pruebas y no se aplicó SQL en Supabase.
+
+
+## Implementación inicial de recepción atómica — migración preview 005
+
+Se incorporó `supabase/migrations-preview/202611090005_purchase_receive_auth.sql` y su prueba estática `202611090005_purchase_receive_auth.test.mjs`. La RPC `public.pos_compra_recibir_auth(jsonb)` queda en preview, pendiente de revisión SQL y pruebas en staging.
+
+Contrato implementado en el borrador:
+- Sesión Supabase obligatoria; empresa/usuario/rol se derivan de `auth.uid()` y helpers existentes. Solo `ADMIN`; sucursal validada con `mi_puede_ver_sucursal`.
+- `search_path=''`, referencias totalmente calificadas, revocación de PUBLIC/anon y EXECUTE explícito para authenticated. La función valida ADMIN en su cuerpo porque SECURITY DEFINER evita confiar en RLS.
+- Lock advisory por empresa + clave idempotente. Mismo JSONB devuelve `compraId`; misma clave con hash diferente genera conflicto.
+- Rechaza líneas duplicadas por producto/variante. Bloquea productos/saldos ordenados por producto y variante para reducir deadlocks.
+- Convierte empaques a unidades base (3 decimales) y costo unitario (4); IGV incluido: tipo 10 divide entre 1.18 y tipos 20/30 no agregan IGV.
+- Verifica producto activo, variante perteneciente al producto, tipo IGV del catálogo y fila de stock existente.
+- Crea cabecera, líneas, lotes, movimientos de inventario, stock y costo promedio ponderado dentro de la misma transacción.
+- Valida una sola caja abierta del usuario/sucursal; exige caja para efectivo/tarjeta/Yape/Plin, prohíbe caja para transferencia y valida efectivo disponible. Registra salida de caja solo para medios con caja.
+- Contado exige pago íntegro; crédito no admite pagos iniciales según el formulario/Edge actual y conserva saldo para abonos posteriores.
+- Devuelve `{ok, compraId, total, pagado, saldoPendiente, repetida}`, contrato que consume el formulario.
+
+Ajuste de integración: `frontend/functions/api/edge/[[path]].js` limita pagos a 8 y referencia a 120 caracteres, alineado con el DTO legacy.
+
+### Riesgos / pendientes antes de considerar la RPC lista
+
+1. Es una primera implementación estática. No se ejecutó contra PostgreSQL, no se aplicó en Supabase y no se ha probado en staging.
+2. Revisar sintaxis/compilación PL/pgSQL, tipos de columnas después de 002/004, cálculo monetario y reglas de fecha de vencimiento por lote.
+3. La clave idempotente compara el JSONB completo. El cliente debe conservar exactamente el mismo payload al reintentar; una diferencia en orden/contenido del arreglo o formato numérico se tratará como conflicto.
+4. La caja se bloquea antes del inventario; el primer pase de stock ordena por producto/variante. Validar esta estrategia con concurrencia real.
+5. La prueba añadida es estática y aún no ejecutada. Se requieren pruebas SQL reales de compra base, variante, lote, IGV 10/20/30, crédito, contado, transferencia, caja insuficiente, reintento idéntico y clave reutilizada con payload distinto.
+6. La migración depende de 002 y 004; no aplicar por separado ni en producción.
+
+No se modificó la base de datos. No se fusionó PR ni se desplegó.
