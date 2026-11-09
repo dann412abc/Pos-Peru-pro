@@ -143,6 +143,9 @@ export async function crearVentaSupabase(payload: SupabaseSalePayload): Promise<
     const status = error?.response?.status;
     const message = error?.response?.data?.message || error?.response?.data?.details ||
       error?.response?.data?.hint || error?.response?.data?.error_description;
+    if (error?.response?.data?.error === 'INVENTORY_COUNT_OPEN' || String(message || '').includes('INVENTORY_COUNT_OPEN')) {
+      throw new Error('Hay un inventario físico abierto en esta sucursal. Cierra el conteo antes de cobrar; el carrito y la misma clave de operación se conservan.');
+    }
     if (status === 401) throw new Error('La sesión Supabase expiró. Inicia sesión nuevamente; conserva el carrito.');
     if (status === 403) throw new Error('La RPC de ventas no está habilitada en Cloudflare. No se registró una venta por otra vía.');
     if (status === 404 || status === 409) throw new Error('La función transaccional de ventas aún no está instalada en el entorno Supabase de pruebas.');
