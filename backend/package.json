@@ -16,7 +16,9 @@
     "migration:revert": "ts-node -r tsconfig-paths/register src/database/run-migrations.ts revert",
     "seed": "ts-node -r tsconfig-paths/register src/database/seed.ts",
     "test:sales:staging": "node --test ../supabase/tests/sales-transaction-staging.integration.test.mjs",
-    "test:sales:static": "node --test ../supabase/migrations-preview/*.test.mjs ../supabase/tests/*.test.mjs"
+    "test:sales:static": "node --test ../supabase/migrations-preview/*.test.mjs ../supabase/tests/*.test.mjs",
+    "test:purchases:staging": "node --test ../supabase/tests/purchase-receipt-staging.integration.test.mjs",
+    "test:purchases:static": "node --test ../supabase/migrations-preview/202611090005_purchase_receive_auth.test.mjs ../supabase/migrations-preview/202611090047_purchase_sales_lot_flow_contract.test.mjs ../supabase/tests/purchase-staging-harness.test.mjs"
   },
   "dependencies": {
     "@nestjs/bull": "^10.1.1",
