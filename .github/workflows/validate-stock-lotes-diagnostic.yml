@@ -1,0 +1,57 @@
+name: Probar diagnóstico stock vs lotes FEFO
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/diagnosticos/20261108_auditoria_stock_vs_lotes_fefo_solo_lectura.sql'
+      - 'supabase/tests/stock-lotes/**'
+      - '.github/workflows/validate-stock-lotes-diagnostic.yml'
+  push:
+    branches: [fix/cloudflare-pages-types-1.44.78]
+    paths:
+      - 'supabase/diagnosticos/20261108_auditoria_stock_vs_lotes_fefo_solo_lectura.sql'
+      - 'supabase/tests/stock-lotes/**'
+      - '.github/workflows/validate-stock-lotes-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: stock_lotes_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d stock_lotes_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Crear datos ficticios aislados
+        env:
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d stock_lotes_test -f supabase/tests/stock-lotes/fixture.sql
+      - name: Ejecutar diagnóstico y comprobar escenarios
+        env:
+          PGPASSWORD: postgres
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d stock_lotes_test -At -F '|' -f supabase/diagnosticos/20261108_auditoria_stock_vs_lotes_fefo_solo_lectura.sql > /tmp/stock-lotes.txt
+          grep -q '101|.*STOCK_SIN_LOTES_VIGENTES_Y_LOTES_VENCIDOS' /tmp/stock-lotes.txt
+          grep -q '102|.*LOTES_SUPERAN_STOCK' /tmp/stock-lotes.txt
+          grep -q '201|7|.*STOCK_SIN_LOTES_VIGENTES' /tmp/stock-lotes.txt
+          if grep -q '103|' /tmp/stock-lotes.txt; then
+            echo 'El saldo conciliado 103 apareció como diferencia' >&2
+            exit 1
+          fi
+          cat /tmp/stock-lotes.txt
