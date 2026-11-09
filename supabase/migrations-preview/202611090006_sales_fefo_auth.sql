@@ -82,7 +82,7 @@ BEGIN
     pg_catalog.hashtextextended('pos:venta:'||v_empresa||':'||v_key,0)
   );
 
-  SELECT c.id,c.sucursal_id,c.request_hash,c.serie,c.correlativo,c.fecha_emision,c.caja_id,c.total,c.estado
+  SELECT c.id,c.sucursal_id,c.request_hash,c.tipo,c.serie,c.correlativo,c.fecha_emision,c.caja_id,c.total,c.estado
     INTO v_existente
   FROM public.comprobante c
   WHERE c.empresa_id=v_empresa AND c.idempotency_key=v_key
@@ -105,7 +105,11 @@ BEGIN
         USING ERRCODE='23514';
     END IF;
     RETURN jsonb_build_object(
+      'ok',true,
+      'decision','SALE_CONFIRMED',
       'id',v_existente.id,
+      'comprobanteId',v_existente.id,
+      'tipo',v_existente.tipo,
       'serie',v_existente.serie,
       'correlativo',v_existente.correlativo,
       'fechaEmision',v_existente.fecha_emision,
@@ -113,6 +117,7 @@ BEGIN
       'total',v_existente.total,
       'estado',v_existente.estado,
       'repetida',true,
+      'idempotentReplay',true,
       'trazabilidadFEFO',true
     );
   END IF;
@@ -185,12 +190,99 @@ BEGIN
   END LOOP;
 
   RETURN v_result || jsonb_build_object(
+    'ok',true,
+    'decision','SALE_CONFIRMED',
+    'comprobanteId',v_comprobante,
     'lotesConsumidos',v_asignaciones,
     'trazabilidadFEFO',true,
-    'repetida',false
+    'repetida',false,
+    'idempotentReplay',false
   );
 END;
 $fn$;
+
+
+-- Recovery RPC used after an ambiguous network response. It never mutates data
+-- and confirms only sales whose complete FEFO trace committed with the receipt.
+CREATE OR REPLACE FUNCTION public.pos_venta_idempotencia_consultar_auth(p_payload jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=''
+AS $recovery$
+DECLARE
+  v_uid uuid:=auth.uid();
+  v_usuario integer;
+  v_empresa integer;
+  v_key text;
+  v_hash text;
+  v_sale record;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'AUTH_REQUIRED' USING ERRCODE='42501';
+  END IF;
+  v_usuario:=public.mi_usuario_id();
+  v_empresa:=public.mi_empresa_id();
+  IF v_usuario IS NULL OR v_empresa IS NULL
+     OR COALESCE(public.mi_rol(),'') NOT IN ('ADMIN','CAJERO') THEN
+    RAISE EXCEPTION 'SALE_IDEMPOTENCY_FORBIDDEN' USING ERRCODE='42501';
+  END IF;
+  IF p_payload IS NULL OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'INVALID_SALE_PAYLOAD' USING ERRCODE='22023';
+  END IF;
+  v_key:=NULLIF(btrim(p_payload->>'idempotencyKey'),'');
+  IF v_key IS NULL OR v_key !~ '^[A-Za-z0-9._:-]{8,100} FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.pos_registrar_venta_fefo_auth(jsonb) TO authenticated;
+COMMENT ON FUNCTION public.pos_registrar_venta_fefo_auth(jsonb) IS
+  'PREVIEW: atomic sale wrapper; delegates sale validation then consumes non-expired inventory lots by FEFO and records exact sale-line trace.';
+
+COMMIT;
+ THEN
+    RAISE EXCEPTION 'SALE_IDEMPOTENCY_KEY_INVALID' USING ERRCODE='22023';
+  END IF;
+  v_hash:=pg_catalog.md5(p_payload::text);
+
+  SELECT c.id,c.sucursal_id,c.request_hash,c.tipo,c.serie,c.correlativo,
+         c.total,c.estado,c.caja_id,c.fecha_emision
+  INTO v_sale
+  FROM public.comprobante c
+  WHERE c.empresa_id=v_empresa AND c.idempotency_key=v_key;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok',true,'existente',false,'decision','NOT_FOUND');
+  END IF;
+  IF v_sale.request_hash IS DISTINCT FROM v_hash THEN
+    RAISE EXCEPTION 'SALE_IDEMPOTENCY_CONFLICT' USING ERRCODE='23505';
+  END IF;
+  IF NOT public.mi_puede_ver_sucursal(v_sale.sucursal_id) THEN
+    RAISE EXCEPTION 'SALE_IDEMPOTENCY_FORBIDDEN' USING ERRCODE='42501';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.comprobante_linea cl
+    WHERE cl.comprobante_id=v_sale.id
+      AND NOT EXISTS (
+        SELECT 1 FROM public.comprobante_lote_salida cls
+        WHERE cls.comprobante_linea_id=cl.id
+          AND cls.empresa_id=v_empresa
+      )
+  ) THEN
+    RETURN jsonb_build_object('ok',false,'existente',false,'decision','TRACE_INCOMPLETE');
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok',true,'existente',true,'decision','SALE_CONFIRMED',
+    'comprobanteId',v_sale.id,'tipo',v_sale.tipo,'serie',v_sale.serie,
+    'correlativo',v_sale.correlativo,'total',v_sale.total,'estado',v_sale.estado,
+    'cajaId',v_sale.caja_id,'idempotentReplay',true
+  );
+END;
+$recovery$;
+
+REVOKE ALL ON FUNCTION public.pos_venta_idempotencia_consultar_auth(jsonb) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.pos_venta_idempotencia_consultar_auth(jsonb) TO authenticated;
+COMMENT ON FUNCTION public.pos_venta_idempotencia_consultar_auth(jsonb) IS
+  'PREVIEW: read-only sale recovery; confirms only matching payloads with complete FEFO line trace.';
 
 REVOKE ALL ON FUNCTION public.pos_registrar_venta_fefo_auth(jsonb) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.pos_registrar_venta_fefo_auth(jsonb) TO authenticated;
