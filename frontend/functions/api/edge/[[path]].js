@@ -352,7 +352,7 @@ export async function onRequest({ request, env, params }) {
     } else {
       const comprobanteId = Number(url.searchParams.get('comprobanteId'));
       if (!Number.isSafeInteger(comprobanteId) || comprobanteId <= 0) return json({ error: 'INVALID_RECEIPT_QUERY' }, 400);
-      rpc = 'pos_disponibilidad_devolucion'; args = { p_comprobante_id: comprobanteId };
+      rpc = 'pos_devolucion_disponibilidad_auth'; args = { p_comprobante_id: comprobanteId };
     }
     try {
       const response = await fetch(new URL(`/rest/v1/rpc/${rpc}`, supabase), {
