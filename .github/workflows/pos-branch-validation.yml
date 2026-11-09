@@ -41,6 +41,9 @@ jobs:
       - name: Validate cash register contracts
         working-directory: frontend
         run: npm run test:cash-contract
+      - name: Validate returns, refunds and cash integration
+        working-directory: frontend
+        run: npm run test:returns-contract
       - name: Validate purchase receipt contracts
         working-directory: frontend
         run: npm run test:purchases-contract
