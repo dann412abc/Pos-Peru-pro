@@ -123,6 +123,29 @@ describe('VentasService.anular - contrato de seguridad', () => {
     expect(method).toContain("tipo: 'SALIDA'");
   });
 
+  it('excluye ventas anuladas del total neto y del desglose por método en el resumen de caja', () => {
+    const cashSource = readFileSync(join(__dirname, '../caja/caja.service.ts'), 'utf8');
+    const start = cashSource.indexOf('async resumen(');
+    const end = cashSource.indexOf('\\n  async ', start + 10);
+    const summary = cashSource.slice(start, end > start ? end : undefined);
+    expect(summary).toContain("c.estado <> 'ANULADA'");
+    expect(summary).toContain('WHERE c.caja_id=$1 AND c.empresa_id=$2 AND c.estado <>');
+    expect(summary).toContain('WHERE c.caja_id = $1 AND c.estado <>');
+  });
+
+  it('conserva el cobro físico original y resta los reembolsos como salidas en la caja donde se pagan', () => {
+    const cashSource = readFileSync(join(__dirname, '../caja/caja.service.ts'), 'utf8');
+    const start = cashSource.indexOf('async resumen(');
+    const end = cashSource.indexOf('\\n  async ', start + 10);
+    const summary = cashSource.slice(start, end > start ? end : undefined);
+    expect(summary).toContain('const efectivoCobrado = await');
+    expect(summary).toContain('const variacionEfectivo = movimientos');
+    expect(summary).toContain("mov.tipo === 'INGRESO' ? 1 : -1");
+    expect(summary).toContain('saldo_inicial');
+    expect(method).toContain("tipo: 'SALIDA'");
+    expect(method).toContain('comprobanteId: c.id');
+  });
+
   it('marca el comprobante anulado solo al final del flujo transaccional', () => {
     const marca = method.indexOf('c.estado = EstadoComprobanteEnum.ANULADA');
     const stock = method.indexOf('UPDATE producto_stock SET stock=stock+$1');
