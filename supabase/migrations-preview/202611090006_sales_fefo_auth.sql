@@ -231,13 +231,7 @@ BEGIN
     RAISE EXCEPTION 'INVALID_SALE_PAYLOAD' USING ERRCODE='22023';
   END IF;
   v_key:=NULLIF(btrim(p_payload->>'idempotencyKey'),'');
-  IF v_key IS NULL OR v_key !~ '^[A-Za-z0-9._:-]{8,100} FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.pos_registrar_venta_fefo_auth(jsonb) TO authenticated;
-COMMENT ON FUNCTION public.pos_registrar_venta_fefo_auth(jsonb) IS
-  'PREVIEW: atomic sale wrapper; delegates sale validation then consumes non-expired inventory lots by FEFO and records exact sale-line trace.';
-
-COMMIT;
- THEN
+  IF v_key IS NULL OR v_key !~ '^[A-Za-z0-9._:-]{8,100}$' THEN
     RAISE EXCEPTION 'SALE_IDEMPOTENCY_KEY_INVALID' USING ERRCODE='22023';
   END IF;
   v_hash:=pg_catalog.md5(p_payload::text);
