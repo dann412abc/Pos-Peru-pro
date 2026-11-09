@@ -29,3 +29,9 @@ test('cash withdrawal availability includes legacy receipts and tenant-scoped mo
   assert.match(movementFn, /cm\\.usuario_id=v_usuario/);
   assert.match(movementFn, /d\\.empresa_id=v_empresa/);
 });
+
+
+test('refund-linked cash movements are not counted twice during cash close or withdrawals',()=>{
+ assert.match(sql,/cm\.devolucion_venta_id IS NULL/);
+ assert.match(sql,/WHERE caja_id=p_caja_id AND devolucion_venta_id IS NULL/);
+});
