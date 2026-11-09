@@ -681,6 +681,57 @@ export async function onRequest({ request, env, params }) {
     } catch { return json({ error: 'CATALOG_UNAVAILABLE' }, 502); }
   }
 
+  // Registro transaccional de devolución de venta. La RPC deriva usuario/empresa desde auth.uid().
+  if (request.method === 'POST' && route === 'returns/register') {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON', message: 'El cuerpo debe ser JSON válido.' }, 400); }
+    const comprobanteId = Number(body?.comprobanteId);
+    const motivo = typeof body?.motivo === 'string' ? body.motivo.trim() : '';
+    const key = typeof body?.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+    const lineas = body?.lineas;
+    const pagos = body?.pagos;
+    if (!Number.isSafeInteger(comprobanteId) || comprobanteId <= 0 ||
+        motivo.length < 5 || motivo.length > 500 ||
+        !/^[A-Za-z0-9._:-]{8,100}$/.test(key) ||
+        !Array.isArray(lineas) || lineas.length < 1 || lineas.length > 100 ||
+        lineas.some(x => !x || !Number.isSafeInteger(Number(x.comprobanteLineaId)) || Number(x.comprobanteLineaId) <= 0 ||
+          !Number.isFinite(Number(x.cantidad)) || Number(x.cantidad) <= 0 || Math.round(Number(x.cantidad) * 1000) !== Number(x.cantidad) * 1000 ||
+          (x.reingresarStock !== undefined && typeof x.reingresarStock !== 'boolean')) ||
+        new Set(lineas.map(x => Number(x.comprobanteLineaId))).size !== lineas.length ||
+        !Array.isArray(pagos) || pagos.length > 4 ||
+        pagos.some(x => !x || !['EFECTIVO','TARJETA','YAPE','PLIN'].includes(x.metodoPago) ||
+          !Number.isFinite(Number(x.monto)) || Number(x.monto) <= 0 || Math.round(Number(x.monto) * 100) !== Number(x.monto) * 100 ||
+          (x.referencia != null && (typeof x.referencia !== 'string' || x.referencia.trim().length > 120)))) {
+      return json({ error: 'INVALID_RETURN_PAYLOAD', message: 'Verifica comprobante, motivo, clave, líneas y medios de reembolso.' }, 400);
+    }
+    if (new Set(pagos.map(x => x.metodoPago)).size !== pagos.length) {
+      return json({ error: 'DUPLICATE_RETURN_PAYMENT_METHOD', message: 'Consolida los importes de cada medio de reembolso.' }, 400);
+    }
+    const encoded = JSON.stringify({
+      p_comprobante_id: comprobanteId,
+      p_motivo: motivo,
+      p_lineas: lineas.map(x => ({ comprobanteLineaId: Number(x.comprobanteLineaId), cantidad: Number(x.cantidad), reingresarStock: x.reingresarStock !== false })),
+      p_pagos: pagos.map(x => ({ metodoPago: x.metodoPago, monto: Number(x.monto), referencia: x.referencia?.trim() || null })),
+      p_idempotency_key: key,
+    });
+    if (encoded.length > 32000) return json({ error: 'RETURN_PAYLOAD_TOO_LARGE', message: 'La devolución supera el tamaño permitido.' }, 413);
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_registrar_devolucion', supabase), {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: encoded,
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'RETURN_REGISTER_NOT_INSTALLED', message: 'La RPC transaccional de devoluciones no está disponible en Supabase.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'RETURN_REGISTER_FORBIDDEN', message: 'La sesión no tiene autorización para registrar esta devolución.' }, 403);
+      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+    } catch {
+      return json({ error: 'RETURN_REGISTER_UNAVAILABLE', message: 'No se pudo confirmar la devolución en Supabase. Conserva la misma clave para reintentar.' }, 502);
+    }
+  }
+
   if (request.method === 'POST' && route.startsWith('rpc/')) {
     const rpcName = route.slice(4);
     const allowlist = String(env.SUPABASE_RPC_ALLOWLIST || '').split(',').map(x => x.trim()).filter(Boolean);
