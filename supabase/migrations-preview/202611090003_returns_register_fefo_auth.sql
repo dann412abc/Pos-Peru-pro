@@ -114,18 +114,8 @@ BEGIN
       CONTINUE;
     END IF;
 
-    -- El esquema actual no vincula cada salida de lote con una línea concreta.
-    -- Si el comprobante repite producto/variante, no se puede asignar FEFO por línea
-    -- sin ambigüedad: bloquear en vez de reutilizar cantidades entre líneas.
-    IF (
-      SELECT COUNT(*) FROM public.comprobante_linea clx
-      WHERE clx.comprobante_id=p_comprobante_id
-        AND clx.producto_id=v_producto_id
-        AND clx.variante_id IS NOT DISTINCT FROM v_variante_id
-    ) > 1 THEN
-      RAISE EXCEPTION 'TRAZABILIDAD_AMBIGUA: el comprobante repite producto/variante; requiere vínculo de lote por línea'
-        USING ERRCODE='23514';
-    END IF;
+    -- Cada salida FEFO pertenece a la línea exacta; se admiten líneas repetidas
+    -- del mismo producto/variante sin mezclar cantidades entre ellas.
 
     v_pendiente:=v_cantidad;
     SELECT COUNT(*) INTO v_origen_count
@@ -133,7 +123,8 @@ BEGIN
     WHERE cls.empresa_id=v_empresa
       AND cls.comprobante_id=p_comprobante_id
       AND cls.producto_id=v_producto_id
-      AND cls.variante_id IS NOT DISTINCT FROM v_variante_id;
+      AND cls.variante_id IS NOT DISTINCT FROM v_variante_id
+      AND cls.comprobante_linea_id=v_linea_id;
 
     -- Devuelve solo a lotes consumidos por esta línea. Los registros de otras
     -- líneas nunca reducen el saldo restituible de la línea actual.
@@ -160,6 +151,7 @@ BEGIN
         AND cls.comprobante_id=p_comprobante_id
         AND cls.producto_id=v_producto_id
         AND cls.variante_id IS NOT DISTINCT FROM v_variante_id
+        AND cls.comprobante_linea_id=v_linea_id
         AND cls.cantidad-COALESCE(previo.cantidad,0)>0
       ORDER BY cls.id
       FOR UPDATE OF cls,il
