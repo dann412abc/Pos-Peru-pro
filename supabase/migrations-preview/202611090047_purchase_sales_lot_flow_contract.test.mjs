@@ -132,7 +132,7 @@ test('return registration is wired from the authenticated frontend to the FEFO E
   assert.match(edge, /p_comprobante_id:\s*comprobanteId/);
   assert.match(returnSql, /FUNCTION public\.pos_devolucion_registrar_auth\(integer,jsonb\)/);
   assert.match(returnWriter, /pg_advisory_xact_lock/);
-  assert.match(returnWriter, /v_existente\\.request_hash<>v_hash/);
+  assert.match(returnWriter, /v_existente\.request_hash<>v_hash/);
 });
 
 test('refund is reconciled once in cash close and history, without counting its cash ledger twice', () => {
