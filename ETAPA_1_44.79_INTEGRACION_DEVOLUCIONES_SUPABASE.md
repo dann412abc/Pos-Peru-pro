@@ -310,3 +310,25 @@ Se añadió la ruta Cloudflare `POST /api/edge/sales/register`, que llama a la R
 - No se aplicó SQL a Supabase; producción sigue intacta.
 - La venta directa a `pos_registrar_venta(jsonb)` todavía puede eludir FEFO si algún cliente la invoca sin pasar por la nueva ruta. Antes de activar lotes en producción, el frontend debe migrar a `/api/edge/sales/register` y se debe cerrar el acceso de rutas alternativas no controladas.
 - Los movimientos de ajuste y transferencia de inventario aún requieren integración con lotes o bloqueo explícito cuando no puedan preservar su trazabilidad.
+
+
+## Corrección de conexión real del módulo de ventas — 2026-11-09
+
+La lectura de solo lectura de las funciones públicas de POS confirmó que producción tiene `pos_registrar_venta(jsonb)`, pero no tiene `pos_venta_crear_auth(jsonb)` ni `pos_venta_idempotencia_consultar_auth(jsonb)`, aunque el cliente anterior intentaba llamar a esas dos funciones. Esta diferencia impedía confirmar que el flujo Supabase de ventas pudiera ejecutarse con el esquema actual.
+
+Cambios preparados en la rama:
+
+1. `frontend/src/api/supabaseSales.ts` ahora envía el cobro a `POST /api/edge/sales/register`, exige que la respuesta confirme `trazabilidadFEFO=true` y conserva el mecanismo de recuperación con la misma clave.
+2. `frontend/functions/api/edge/[[path]].js` enruta la venta al wrapper FEFO y conserva la consulta de recuperación.
+3. La migración preview 006 crea `pos_venta_idempotencia_consultar_auth(jsonb)`: es de solo lectura, compara el hash de la carga original y solo confirma una venta existente si todas sus líneas tienen trazabilidad de lotes completa.
+4. La migración preview 006 revoca EXECUTE de `pos_registrar_venta(jsonb)` a `authenticated`, para que un cliente no pueda saltarse el wrapper FEFO. La función wrapper, creada por el mismo propietario privilegiado, sigue pudiendo delegar a la RPC base.
+5. La preconsulta Edge ya no rechaza líneas repetidas del mismo producto/variante: ahora cada salida y devolución se vincula a su `comprobante_linea.id`.
+6. Se habilitó el tipo `NV` en el POS como Nota de venta, con serie `N001`, además de Boleta y Factura.
+
+### Confirmación de alcance
+
+- Consultas de solo lectura en producción: confirmaron la función de venta existente, sus permisos y que no hay otra RPC pública que la envuelva.
+- No se aplicó ninguna migración ni se revocó ningún permiso en producción.
+- Se ejecutaron comprobaciones estáticas de contenido sobre los archivos de la rama: 12/12 verificaciones manuales PASS.
+- Las pruebas Node del repositorio, compilación TypeScript, compilación PL/pgSQL y pruebas transaccionales todavía no se han ejecutado.
+- La ruta ya está conectada desde el cliente POS en la rama, pero no se ha desplegado ni probado con una sesión real.
