@@ -855,6 +855,53 @@ export async function onRequest({ request, env, params }) {
     }
   }
 
+  // Mermas Supabase: el servidor solo enruta; permisos, FEFO e idempotencia se validan en PostgreSQL.
+  if (request.method === 'GET' && (route === 'inventory/waste/lots' || route === 'inventory/waste/history')) {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    const sucursalId = Number(new URL(request.url).searchParams.get('sucursalId'));
+    if (!Number.isSafeInteger(sucursalId) || sucursalId <= 0) return json({ error: 'INVALID_WASTE_QUERY', message: 'Selecciona una sucursal válida.' }, 400);
+    const rpc = route === 'inventory/waste/lots' ? 'pos_inventario_lotes_merma_auth' : 'pos_inventario_mermas_listar_auth';
+    const args = route === 'inventory/waste/lots' ? { p_sucursal_id: sucursalId } : { p_sucursal_id: sucursalId };
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/' + rpc, supabase), {
+        method: 'POST', headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: JSON.stringify(args),
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'INVENTORY_WASTE_MIGRATION_REQUIRED', message: 'El control de mermas Supabase no está instalado en staging.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_WASTE_FORBIDDEN', message: 'No tienes permiso para consultar esta sucursal.' }, 403);
+      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+    } catch { return json({ error: 'INVENTORY_WASTE_UNAVAILABLE', message: 'No se pudo consultar las mermas en Supabase.' }, 502); }
+  }
+
+  if (request.method === 'POST' && route === 'inventory/waste') {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+    const p = body?.payload;
+    const validId = (v) => Number.isSafeInteger(v) && v > 0;
+    if (!p || typeof p !== 'object' || Array.isArray(p) ||
+        !validId(p.sucursalId) || !validId(p.productoId) || !(p.varianteId == null || validId(p.varianteId)) ||
+        typeof p.cantidad !== 'number' || !Number.isFinite(p.cantidad) || p.cantidad <= 0 || Math.round(p.cantidad * 1000) !== p.cantidad * 1000 ||
+        !['VENCIDO','DANADO','PERDIDA','CONTAMINACION','OTRO'].includes(p.motivoTipo) ||
+        typeof p.observacion !== 'string' || p.observacion.trim().length < 5 || p.observacion.length > 500 ||
+        typeof p.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(p.idempotencyKey)) {
+      return json({ error: 'INVALID_INVENTORY_WASTE', message: 'Verifica producto, sucursal, cantidad, motivo, observación y clave.' }, 400);
+    }
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_inventario_merma_registrar_auth', supabase), {
+        method: 'POST', headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: JSON.stringify({ p_payload: { ...p, observacion: p.observacion.trim() } }),
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'INVENTORY_WASTE_MIGRATION_REQUIRED', message: 'El registro de mermas no está instalado en staging; no se modificó el stock.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_WASTE_FORBIDDEN', message: 'No tienes permiso para registrar mermas en esta sucursal.' }, 403);
+      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+    } catch { return json({ error: 'INVENTORY_WASTE_UNAVAILABLE', message: 'No se pudo confirmar la merma. Conserva la misma clave para reintentar.' }, 502); }
+  }
+
   if (request.method === 'POST' && route.startsWith('rpc/')) {
     const rpcName = route.slice(4);
     const allowlist = String(env.SUPABASE_RPC_ALLOWLIST || '').split(',').map(x => x.trim()).filter(Boolean);
