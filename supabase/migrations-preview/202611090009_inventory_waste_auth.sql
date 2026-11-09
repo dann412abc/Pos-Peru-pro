@@ -170,7 +170,7 @@ BEGIN
   END IF;
   RETURN coalesce((SELECT jsonb_agg(jsonb_build_object(
     'id',m.id,'sucursalNombre',m.sucursal_nombre,'productoNombre',m.producto_nombre,
-    'varianteNombre',m.variante_nombre,'codigoLote','—','fechaVencimiento',NULL,
+    'varianteNombre',m.variante_nombre,'codigoLote','FEFO','fechaVencimiento',NULL,
     'motivoTipo',m.motivo_tipo,'observacion',m.observacion,'cantidad',m.cantidad,
     'costoUnitario',m.costo_unitario,'costoTotal',m.costo_total,
     'usuarioNombre','Usuario #'||m.usuario_id,'createdAt',m.created_at
