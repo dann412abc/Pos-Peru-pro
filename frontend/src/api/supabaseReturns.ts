@@ -76,6 +76,50 @@ export async function preflightSupabaseReturn(
 }
 
 
+
+/** Registra la devolución mediante la RPC transaccional existente en Supabase.
+ * El servidor deriva usuario/empresa desde auth.uid(); la misma clave debe conservarse en reintentos.
+ */
+export async function registerSupabaseReturn(
+  comprobanteId: number,
+  payload: SupabaseReturnPreflightPayload,
+): Promise<any> {
+  if (!Number.isSafeInteger(comprobanteId) || comprobanteId <= 0) throw new Error('Selecciona un comprobante válido.');
+  const motivo = String(payload?.motivo || '').trim();
+  const key = String(payload?.idempotencyKey || '').trim();
+  if (motivo.length < 5 || motivo.length > 500 || !/^[A-Za-z0-9._:-]{8,100}$/.test(key)) {
+    throw new Error('Indica un motivo y una clave de operación válidos.');
+  }
+  if (!Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 100 ||
+      payload.lineas.some(x => !Number.isSafeInteger(x.comprobanteLineaId) || x.comprobanteLineaId <= 0 ||
+        !Number.isFinite(x.cantidad) || x.cantidad <= 0 || Math.round(x.cantidad * 1000) !== x.cantidad * 1000)) {
+    throw new Error('Selecciona líneas y cantidades válidas para devolver.');
+  }
+  if (new Set(payload.lineas.map(x => x.comprobanteLineaId)).size !== payload.lineas.length) {
+    throw new Error('No repitas líneas en una misma devolución.');
+  }
+  const pagos = payload.pagos || [];
+  if (!Array.isArray(pagos) || pagos.length > 4 ||
+      pagos.some(x => !['EFECTIVO', 'TARJETA', 'YAPE', 'PLIN'].includes(x.metodoPago) ||
+        !Number.isFinite(x.monto) || x.monto <= 0 || Math.round(x.monto * 100) !== x.monto * 100 ||
+        (x.referencia != null && x.referencia.length > 120)) ||
+      new Set(pagos.map(x => x.metodoPago)).size !== pagos.length) {
+    throw new Error('Los medios o importes del reembolso no son válidos.');
+  }
+  const response = await axios.post('/api/edge/returns/register', {
+    comprobanteId, motivo, idempotencyKey: key, lineas: payload.lineas, pagos,
+  }, { headers: authHeaders(), timeout: 45000 });
+  const result = response.data;
+  if (!result || !Number.isSafeInteger(Number(result.id)) || Number(result.id) <= 0 ||
+      Number(result.comprobanteId) !== comprobanteId ||
+      !Number.isFinite(Number(result.totalDevolucion)) ||
+      !Number.isFinite(Number(result.creditoRevertido)) ||
+      !Number.isFinite(Number(result.montoReembolsado))) {
+    throw new Error('Supabase no devolvió una confirmación completa de la devolución. Conserva la misma clave y consulta el historial.');
+  }
+  return result;
+}
+
 /**
  * Comprueba las tablas y columnas requeridas por la futura devolución transaccional.
  * Es una consulta de diagnóstico: no modifica datos y nunca habilita el registro.
