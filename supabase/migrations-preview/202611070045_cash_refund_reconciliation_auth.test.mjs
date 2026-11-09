@@ -37,3 +37,10 @@ test('cash summary reports net sales after registered returns',()=>{
  assert.match(sql,/GREATEST\(0,c\.total-COALESCE\(d\.total_devuelto,0\)\)/);
  assert.match(sql,/totalDevoluciones/);
 });
+
+
+test('refunds are not double-counted as both caja_movimiento and devolucion_venta_pago',()=>{
+ assert.match(sql,/devolucion_venta_id IS NULL/);
+ assert.match(sql,/FROM public\.devolucion_venta_pago dp/);
+ assert.match(sql,/WHERE d\.caja_id=p_caja_id AND d\.usuario_id=v_usuario AND d\.estado='REGISTRADA'/);
+});
