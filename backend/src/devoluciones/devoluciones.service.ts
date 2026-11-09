@@ -22,8 +22,9 @@ export class DevolucionesService {
     return sucursalId ? [sucursalId] : permitidas;
   }
 
-  private hashSolicitud(dto: CrearDevolucionVentaDto): string {
+  private hashSolicitud(comprobanteId: number, dto: CrearDevolucionVentaDto): string {
     const contenido = {
+      comprobanteId: Number(comprobanteId),
       motivo: dto.motivo.trim(),
       lineas: [...(dto.lineas || [])].map((l) => ({
         comprobanteLineaId: Number(l.comprobanteLineaId), cantidad: quantity(Number(l.cantidad)), reingresarStock: Boolean(l.reingresarStock),
@@ -66,7 +67,7 @@ export class DevolucionesService {
               c.fecha_emision AS "fechaEmision",
               jsonb_build_object('nombre',cl.nombre) AS cliente
        FROM comprobante c
-       INNER JOIN cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
+       LEFT JOIN cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
        WHERE c.empresa_id=$1 AND c.sucursal_id=ANY($2::int[])
          AND c.tipo IN ('01','03') AND c.estado <> 'ANULADA'
          AND (
@@ -255,7 +256,7 @@ export class DevolucionesService {
     if (!motivo || motivo.length < 5) throw new BadRequestException('Indique un motivo de al menos 5 caracteres');
     if (!clave || clave.length < 8 || clave.length > 100) throw new BadRequestException('La clave de operación es inválida');
     if (!Array.isArray(dto.lineas) || !dto.lineas.length || dto.lineas.length > 100) throw new BadRequestException('Seleccione al menos una línea para devolver');
-    const hash = this.hashSolicitud(dto);
+    const hash = this.hashSolicitud(comprobanteId, dto);
 
     try {
       await this.dataSource.transaction(async (manager: EntityManager) => {
