@@ -75,3 +75,64 @@ export async function transferirInventarioSupabase(payload: InventoryTransferPay
   }
   return response.data;
 }
+
+
+export interface InventoryWastePayload {
+  sucursalId: number;
+  productoId: number;
+  varianteId?: number | null;
+  cantidad: number;
+  motivoTipo: 'VENCIDO' | 'DANADO' | 'PERDIDA' | 'CONTAMINACION' | 'OTRO';
+  observacion: string;
+  idempotencyKey: string;
+}
+
+function supabaseInventoryToken(): string {
+  const token = getAccessToken();
+  if (!token || token.startsWith('demo-')) throw new Error('Inicia sesión con Supabase para gestionar mermas.');
+  return token;
+}
+
+/** Carga lotes disponibles para registrar una merma en la sucursal activa. */
+export async function listarLotesMermaSupabase(sucursalId: number): Promise<any[]> {
+  const token = supabaseInventoryToken();
+  if (!Number.isSafeInteger(sucursalId) || sucursalId <= 0) throw new Error('Sucursal inválida.');
+  const response = await axios.get('/api/edge/inventory/waste/lots', {
+    params: { sucursalId }, headers: { Authorization: `Bearer ${token}` }, timeout: 20000,
+  });
+  if (!Array.isArray(response.data)) throw new Error('Supabase no devolvió la lista de lotes.');
+  return response.data;
+}
+
+/** Consulta el historial de mermas autorizado por sucursal. */
+export async function listarMermasSupabase(sucursalId: number): Promise<any[]> {
+  const token = supabaseInventoryToken();
+  if (!Number.isSafeInteger(sucursalId) || sucursalId <= 0) throw new Error('Sucursal inválida.');
+  const response = await axios.get('/api/edge/inventory/waste/history', {
+    params: { sucursalId }, headers: { Authorization: `Bearer ${token}` }, timeout: 20000,
+  });
+  if (!Array.isArray(response.data)) throw new Error('Supabase no devolvió el historial de mermas.');
+  return response.data;
+}
+
+/** Registra merma, salida de stock y consumo FEFO de lotes en una transacción. */
+export async function registrarMermaSupabase(payload: InventoryWastePayload): Promise<Record<string, unknown>> {
+  const token = supabaseInventoryToken();
+  const validId = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+  if (!validId(payload.sucursalId) || !validId(payload.productoId) ||
+      !(payload.varianteId == null || validId(payload.varianteId)) ||
+      !Number.isFinite(payload.cantidad) || payload.cantidad <= 0 ||
+      Math.round(payload.cantidad * 1000) !== payload.cantidad * 1000 ||
+      !['VENCIDO','DANADO','PERDIDA','CONTAMINACION','OTRO'].includes(payload.motivoTipo) ||
+      typeof payload.observacion !== 'string' || payload.observacion.trim().length < 5 || payload.observacion.length > 500 ||
+      !/^[A-Za-z0-9._:-]{12,100}$/.test(payload.idempotencyKey)) {
+    throw new Error('Los datos de la merma no son válidos.');
+  }
+  const response = await axios.post('/api/edge/inventory/waste', {
+    payload: { ...payload, observacion: payload.observacion.trim() },
+  }, { headers: { Authorization: `Bearer ${token}` }, timeout: 45000 });
+  if (!response.data || response.data.ok !== true || response.data.trazabilidadLotes !== true) {
+    throw new Error('Supabase no confirmó la merma ni la trazabilidad de lotes.');
+  }
+  return response.data;
+}
