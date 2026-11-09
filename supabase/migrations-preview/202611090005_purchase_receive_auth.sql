@@ -51,14 +51,15 @@ BEGIN
   RAISE EXCEPTION 'PURCHASE_DOCUMENT_INVALID' USING ERRCODE='22023';
  END IF;
  IF doc_date>(now() AT TIME ZONE 'America/Lima')::date THEN RAISE EXCEPTION 'PURCHASE_DATE_FUTURE' USING ERRCODE='22023'; END IF;
- IF pay_condition NOT IN ('CONTADO','CREDITO')
+ IF pay_condition IS NULL OR pay_condition NOT IN ('CONTADO','CREDITO')
  OR (pay_condition='CONTADO' AND due_date IS NOT NULL)
  OR (pay_condition='CREDITO' AND (due_date IS NULL OR due_date<doc_date)) THEN
   RAISE EXCEPTION 'PURCHASE_PAYMENT_CONDITION_INVALID' USING ERRCODE='22023';
  END IF;
  IF idem_key IS NULL OR idem_key !~ '^[A-Za-z0-9._:-]{8,100}$' THEN RAISE EXCEPTION 'PURCHASE_IDEMPOTENCY_KEY_INVALID' USING ERRCODE='22023'; END IF;
- IF jsonb_typeof(p_payload->'lineas')<>'array' OR jsonb_array_length(p_payload->'lineas') NOT BETWEEN 1 AND 200
- OR jsonb_typeof(COALESCE(p_payload->'pagos','[]'::jsonb))<>'array'
+ IF jsonb_typeof(p_payload->'lineas') IS DISTINCT FROM 'array'
+ OR jsonb_array_length(COALESCE(p_payload->'lineas','[]'::jsonb)) NOT BETWEEN 1 AND 200
+ OR jsonb_typeof(COALESCE(p_payload->'pagos','[]'::jsonb)) IS DISTINCT FROM 'array'
  OR jsonb_array_length(COALESCE(p_payload->'pagos','[]'::jsonb))>8 THEN
   RAISE EXCEPTION 'PURCHASE_LINES_OR_PAYMENTS_INVALID' USING ERRCODE='22023';
  END IF;
