@@ -35,6 +35,16 @@ test('purchase and sale frontend services call their matching authenticated Edge
   assert.match(edge, /route === 'sales\/register'[\s\S]*?pos_registrar_venta_fefo_auth/);
 });
 
+test('purchase UI supports mixed supplier payments and validates the exact total', () => {
+  assert.match(purchaseUi, /pagosCompra\.map\(\(pago\)/);
+  assert.match(purchaseUi, /pagosCompra\.reduce\(\(sum, pago\) => sum \+ pago\.monto, 0\) - totalCompra/);
+  assert.match(purchaseUi, /metodoPago: pago\.metodoPago/);
+  assert.match(purchaseUi, /pago\.metodoPago !== 'TRANSFERENCIA' \? \{ cajaId: cajas\[0\]\?\.id \}/);
+  assert.match(purchaseUi, /Añadir medio/);
+  assert.match(purchaseUi, /Completar saldo en último medio/);
+  assert.match(purchaseSql, /cardinality\(cash_ids\)>1 THEN RAISE EXCEPTION 'PURCHASE_MULTIPLE_CASHBOXES'/);
+});
+
 test('purchase UI submits variant, pack conversion, lot and expiry fields', () => {
   assert.match(purchaseUi, /varianteId: l\.varianteId/);
   assert.match(purchaseUi, /unidadesPorEmpaque: Number\(l\.unidadesPorEmpaque\)/);
