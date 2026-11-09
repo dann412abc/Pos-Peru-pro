@@ -197,7 +197,7 @@ export default function Devoluciones() {
         </div>
         <div className="flex gap-2">
           <button className="btn-secundario flex items-center gap-2" onClick={recargar} disabled={cargando}><RefreshCw size={15} className={cargando ? 'animate-spin' : ''} /> Actualizar</button>
-          {!ES_SUPABASE_AUTH && <button className="btn-ambar flex items-center gap-2" onClick={() => setMostrarFormulario((v) => !v)}><RotateCcw size={16} /> Nueva devolución</button>}
+          <button className="btn-ambar flex items-center gap-2" onClick={() => setMostrarFormulario((v) => !v)}><RotateCcw size={16} /> {ES_SUPABASE_AUTH ? 'Consultar devolución' : 'Nueva devolución'}</button>
         </div>
       </div>
 
