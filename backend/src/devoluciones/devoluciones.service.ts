@@ -293,7 +293,7 @@ export class DevolucionesService {
         if (!cajasAbiertas.length) throw new BadRequestException('Abra una caja en la sucursal de la venta para registrar la devolución');
         const cajaId = Number(cajasAbiertas[0].id);
         const originales = await manager.query(
-          `SELECT cl.id,cl.producto_id,cl.variante_id,cl.cantidad,cl.precio_unitario,cl.subtotal,
+          `SELECT cl.id,cl.producto_id,cl.variante_id,cl.cantidad,cl.precio_unitario,cl.costo_unitario,cl.subtotal,
                    p.nombre,COALESCE(pv.nombre,'') AS variante_nombre
             FROM comprobante_linea cl
             INNER JOIN producto p ON p.id=cl.producto_id AND p.empresa_id=$2
@@ -492,12 +492,16 @@ export class DevolucionesService {
               if (lotesOrigen.length) {
                 throw new BadRequestException('No se pudo identificar el lote original completo para reingresar la devolución. Revise la trazabilidad del comprobante.');
               }
+              const costoOriginal = Number(item.original.costo_unitario);
+              if (!Number.isFinite(costoOriginal) || costoOriginal < 0) {
+                throw new BadRequestException('No se puede reingresar el producto: el costo histórico de la venta no es válido.');
+              }
               await manager.query(
                 `INSERT INTO inventario_lote
                   (empresa_id,sucursal_id,producto_id,variante_id,codigo_lote,fecha_vencimiento,cantidad_inicial,cantidad_disponible,costo_unitario)
-                 VALUES($1,$2,$3,$4,$5,NULL,$6,$6,0)`,
+                 VALUES($1,$2,$3,$4,$5,NULL,$6,$6,$7)`,
                 [empresaId, venta.sucursal_id, item.original.producto_id, varianteId,
-                  `DEVCLIENTE-${devolucionId}-${item.original.id}`, pendiente],
+                  `DEVCLIENTE-${devolucionId}-${item.original.id}`, pendiente, costoOriginal],
               );
             }
             await manager.query(
