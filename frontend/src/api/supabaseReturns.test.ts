@@ -42,7 +42,7 @@ describe('adaptador de consultas de devoluciones Supabase', () => {
       params: { comprobanteId: 90 },
     }));
     get.mockResolvedValue({ data: { comprobante: null, lineas: [] } });
-    await expect(fetchSupabaseReturnAvailability(90)).rejects.toThrow(/disponibilidad inválida/);
+    await expect(fetchSupabaseReturnAvailability(90)).rejects.toThrow(/disponibilidad de devolución inválida/);
   });
 
   it('prevalida sin registrar y envía solo el contrato esperado', async () => {
