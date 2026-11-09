@@ -39,7 +39,7 @@ test('purchase lines convert packs, enforce catalog IGV and calculate weighted c
   assert.match(sql, /round\(pack_cost\/units_per_pack,4\)/);
   assert.match(sql, /PURCHASE_IGV_MISMATCH/);
   assert.match(sql, /round\(amount\/1\.18,2\)/);
-  assert.match(sql, /avg_after:=round\(\(\(stock_before\*avg_before\)\+\(qty\*unit_cost\)\)\/\(stock_before\+qty\),4\)/);
+  assert.match(sql, /avg_after:=round\(\(\(stock_before\*COALESCE\(avg_before,0\)\)\+\(qty\*unit_cost\)\)\/\(stock_before\+qty\),4\)/);
   assert.match(sql, /ORDER BY \(value->>'productoId'\)::integer/);
   assert.doesNotMatch(sql, /packs:\(/);
 });
