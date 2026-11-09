@@ -74,6 +74,9 @@ jobs:
       - name: Validate cash register UI integration contract
         working-directory: frontend
         run: node --test tests/contracts/cash-ui-integration-contract.test.mjs
+      - name: Validate POS Supabase catalog UI contract
+        working-directory: frontend
+        run: node --test tests/contracts/pos-supabase-catalog-ui-contract.test.mjs
       - name: Type-check and build frontend
         working-directory: frontend
         run: npm run build
