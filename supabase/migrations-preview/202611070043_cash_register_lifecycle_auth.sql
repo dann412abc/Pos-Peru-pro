@@ -44,16 +44,23 @@ BEGIN
  IF NOT FOUND OR v_estado<>'ABIERTA' THEN RAISE EXCEPTION 'CASH_NOT_OPEN_OR_FORBIDDEN' USING ERRCODE='42501'; END IF;
  IF p_tipo='SALIDA' AND p_metodo='EFECTIVO' THEN
   SELECT round(c.saldo_inicial + COALESCE((
-    SELECT SUM(cp.monto) FROM public.comprobante_pago cp JOIN public.comprobante co ON co.id=cp.comprobante_id
-    WHERE co.caja_id=c.id AND cp.metodo_pago='EFECTIVO' AND co.estado<>'ANULADA'
+    SELECT SUM(cobro.monto) FROM (
+      SELECT cp.metodo_pago,cp.monto FROM public.comprobante_pago cp
+      JOIN public.comprobante co ON co.id=cp.comprobante_id
+      WHERE co.caja_id=c.id AND co.empresa_id=v_empresa AND co.estado<>'ANULADA'
+      UNION ALL
+      SELECT co.metodo_pago,co.total FROM public.comprobante co
+      WHERE co.caja_id=c.id AND co.empresa_id=v_empresa AND co.estado<>'ANULADA'
+        AND NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=co.id)
+    ) cobro WHERE cobro.metodo_pago='EFECTIVO'
   ),0) + COALESCE((
     SELECT SUM(CASE WHEN cm.tipo='INGRESO' THEN cm.monto ELSE -cm.monto END)
-    FROM public.caja_movimiento cm WHERE cm.caja_id=c.id AND cm.metodo_pago='EFECTIVO'
+    FROM public.caja_movimiento cm WHERE cm.caja_id=c.id AND cm.usuario_id=v_usuario AND cm.metodo_pago='EFECTIVO'
   ),0) - COALESCE((
     SELECT SUM(dp.monto) FROM public.devolucion_venta_pago dp
     JOIN public.devolucion_venta d ON d.id=dp.devolucion_id AND d.empresa_id=dp.empresa_id
-    WHERE d.caja_id=c.id AND d.estado='REGISTRADA' AND dp.metodo_pago='EFECTIVO'
-  ),0),2) INTO v_disponible FROM public.caja c WHERE c.id=p_caja_id;
+    WHERE d.caja_id=c.id AND d.empresa_id=v_empresa AND d.estado='REGISTRADA' AND dp.metodo_pago='EFECTIVO'
+  ),0),2) INTO v_disponible FROM public.caja c WHERE c.id=p_caja_id AND c.usuario_id=v_usuario;
   IF p_monto>v_disponible THEN RAISE EXCEPTION 'CASH_INSUFFICIENT_FUNDS' USING ERRCODE='22023'; END IF;
  END IF;
  INSERT INTO public.caja_movimiento(caja_id,usuario_id,tipo,metodo_pago,monto,motivo)
