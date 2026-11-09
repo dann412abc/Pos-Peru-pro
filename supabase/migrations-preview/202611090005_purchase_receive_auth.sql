@@ -159,6 +159,14 @@ BEGIN
   ) t;
   SELECT cash_available+COALESCE(sum(CASE WHEN cm.tipo='INGRESO' THEN cm.monto ELSE -cm.monto END),0)
   INTO cash_available FROM public.caja_movimiento cm WHERE cm.caja_id=cash_row.id AND cm.metodo_pago='EFECTIVO';
+  -- Refunds are persisted separately from caja_movimiento; deduct them before
+  -- allowing another supplier payment so purchase receipts cannot overspend cash.
+  SELECT cash_available-COALESCE(sum(dp.monto),0)
+  INTO cash_available
+  FROM public.devolucion_venta_pago dp
+  JOIN public.devolucion_venta d ON d.id=dp.devolucion_id AND d.empresa_id=dp.empresa_id
+  WHERE d.caja_id=cash_row.id AND d.empresa_id=company_id
+    AND d.estado='REGISTRADA' AND dp.metodo_pago='EFECTIVO';
   cash_available:=round(cash_available,2);
   IF cash_out>cash_available THEN RAISE EXCEPTION 'PURCHASE_CASH_NOT_ENOUGH: disponible %, requerido %',cash_available,cash_out USING ERRCODE='22023'; END IF;
  END IF;
