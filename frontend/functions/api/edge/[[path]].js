@@ -711,20 +711,22 @@ export async function onRequest({ request, env, params }) {
     }
     const encoded = JSON.stringify({
       p_comprobante_id: comprobanteId,
-      p_motivo: motivo,
-      p_lineas: lineas.map(x => ({ comprobanteLineaId: Number(x.comprobanteLineaId), cantidad: Number(x.cantidad), reingresarStock: x.reingresarStock !== false })),
-      p_pagos: pagos.map(x => ({ metodoPago: x.metodoPago, monto: Number(x.monto), referencia: x.referencia?.trim() || null })),
-      p_idempotency_key: key,
+      p_payload: {
+        motivo,
+        idempotencyKey: key,
+        lineas: lineas.map(x => ({ comprobanteLineaId: Number(x.comprobanteLineaId), cantidad: Number(x.cantidad), reingresarStock: x.reingresarStock !== false })),
+        pagos: pagos.map(x => ({ metodoPago: x.metodoPago, monto: Number(x.monto), referencia: x.referencia?.trim() || null })),
+      },
     });
     if (encoded.length > 32000) return json({ error: 'RETURN_PAYLOAD_TOO_LARGE', message: 'La devolución supera el tamaño permitido.' }, 413);
     try {
-      const response = await fetch(new URL('/rest/v1/rpc/pos_registrar_devolucion', supabase), {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_devolucion_registrar_auth', supabase), {
         method: 'POST',
         headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
         body: encoded,
       });
       const result = await response.text();
-      if (response.status === 404) return json({ error: 'RETURN_REGISTER_NOT_INSTALLED', message: 'La RPC transaccional de devoluciones no está disponible en Supabase.' }, 409);
+      if (response.status === 404) return json({ error: 'RETURN_REGISTER_NOT_INSTALLED', message: 'La RPC autenticada de devoluciones no está disponible en Supabase.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'RETURN_REGISTER_FORBIDDEN', message: 'La sesión no tiene autorización para registrar esta devolución.' }, 403);
       return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
     } catch {
