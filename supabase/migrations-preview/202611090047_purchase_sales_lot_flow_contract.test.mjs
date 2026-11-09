@@ -37,7 +37,7 @@ test('purchase and sale frontend services call their matching authenticated Edge
 
 test('purchase UI supports mixed supplier payments and validates the exact total', () => {
   assert.match(purchaseUi, /pagosCompra\.map\(\(pago\)/);
-  assert.match(purchaseUi, /pagosCompra\.reduce\(\(sum, pago\) => sum \+ pago\.monto, 0\) - totalCompra/);
+  assert.match(purchaseUi, /pagosCompra\\.reduce\\(\\(sum, p\\) => sum \\+ Math\\.max\\(0, Number\\(p\\.monto\\) \\|\\| 0\\), 0\\)/);
   assert.match(purchaseUi, /metodoPago: pago\.metodoPago/);
   assert.match(purchaseUi, /pago\.metodoPago !== 'TRANSFERENCIA' \? \{ cajaId: cajas\[0\]\?\.id \}/);
   assert.match(purchaseUi, /Añadir medio/);
