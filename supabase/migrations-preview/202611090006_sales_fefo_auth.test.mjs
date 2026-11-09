@@ -13,7 +13,7 @@ test('migration is preview-only and requires the real sale and lot schema',()=>{
 test('every FEFO allocation is linked to the exact comprobante line',()=>{
   assert.match(sql,/ADD COLUMN IF NOT EXISTS comprobante_linea_id integer/);
   assert.match(sql,/REFERENCES public\.comprobante_linea\(id\)/);
-  assert.match(sql,/comprobante_linea_id, lote_id, producto_id/);
+  assert.match(sql,/comprobante_linea_id,lote_id,producto_id/);
   assert.match(sql,/cls\.comprobante_linea_id=cl\.id/);
 });
 
