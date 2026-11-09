@@ -53,7 +53,7 @@ export interface InventoryTransferPayload {
 export async function transferirInventarioSupabase(payload: InventoryTransferPayload): Promise<Record<string, unknown>> {
   const token = getAccessToken();
   if (!token || token.startsWith('demo-')) throw new Error('Inicia sesión con Supabase para transferir inventario.');
-  const validId = (value: unknown) => Number.isSafeInteger(value) && Number(value) > 0;
+  const validId = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
   if (!validId(payload.sucursalOrigenId) || !validId(payload.sucursalDestinoId) ||
       payload.sucursalOrigenId === payload.sucursalDestinoId ||
       typeof payload.motivo !== 'string' || payload.motivo.trim().length < 5 || payload.motivo.length > 200 ||
