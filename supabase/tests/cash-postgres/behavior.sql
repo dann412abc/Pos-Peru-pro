@@ -76,7 +76,7 @@ BEGIN
   closed := public.pos_caja_cerrar_auth(v_caja_id,155.00,'[]'::jsonb);
   IF closed->>'estado' <> 'CERRADA' OR (closed->>'diferencia')::numeric <> 0.00 THEN
     RAISE EXCEPTION 'TEST_CASH_CLOSE_FAILED: %', closed;
-  END;
+  END IF;
 
   BEGIN
     PERFORM public.pos_caja_movimiento_auth(v_caja_id,'INGRESO','EFECTIVO',1.00,'Movimiento cerrado');
