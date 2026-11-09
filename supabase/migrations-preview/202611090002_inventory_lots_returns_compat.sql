@@ -30,7 +30,27 @@ ALTER TABLE public.compra_linea
   ADD COLUMN IF NOT EXISTS fecha_vencimiento date;
 
 ALTER TABLE public.producto_variante_stock
+  ADD COLUMN IF NOT EXISTS producto_id integer,
   ADD COLUMN IF NOT EXISTS costo_promedio numeric(12,4) NOT NULL DEFAULT 0;
+
+-- El contrato actual de compras/ventas consulta producto_id directamente en el saldo de variante.
+UPDATE public.producto_variante_stock vs
+SET producto_id=pv.producto_id
+FROM public.producto_variante pv
+WHERE pv.id=vs.variante_id AND pv.empresa_id=vs.empresa_id
+  AND vs.producto_id IS DISTINCT FROM pv.producto_id;
+
+DO $variant_stock$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.producto_variante_stock WHERE producto_id IS NULL) THEN
+    RAISE EXCEPTION 'INVENTORY_VARIANT_STOCK_PRODUCT_LINK_MISSING: hay saldos de variante sin producto asociado';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_variante_stock_producto' AND conrelid='public.producto_variante_stock'::regclass) THEN
+    ALTER TABLE public.producto_variante_stock ADD CONSTRAINT fk_variante_stock_producto
+      FOREIGN KEY (producto_id) REFERENCES public.producto(id) ON DELETE RESTRICT;
+  END IF;
+END
+$variant_stock$;
 
 -- Mantener el tipo de variante compatible con producto_variante.id (bigint).
 ALTER TABLE public.devolucion_venta_linea
