@@ -28,6 +28,13 @@ En el proyecto Supabase `POS AYNI PERÚ`:
 - No hay workflows de GitHub Actions configurados para ejecutar automáticamente las pruebas de esta rama; las pruebas estáticas están escritas, pero aún no ejecutadas.
 - El PR está abierto como borrador: https://github.com/dann412abc/Pos-Peru-pro/pull/2
 
+## Trabajo técnico siguiente — compatibilidad FEFO preparada
+- Se recuperó la migración histórica de lotes y se comparó con el writer de ventas FEFO y la lógica NestJS de devolución.
+- Se añadió `202611090002_inventory_lots_returns_compat.sql` como migración preview aditiva: agrega variante/lote a las líneas y movimientos que lo necesitan, crea tablas de lote/salida/devolución por lote, completa el vínculo `producto_id` faltante en `producto_variante_stock` y prepara lotes de apertura desde los saldos actuales sin modificar esos saldos.
+- Se añadió prueba estática de la migración. Aún no se ejecutó.
+- El esquema remoto también carece de `producto_id` y `costo_promedio` en `producto_variante_stock`, aunque las RPC de compras/FEFO los consultan. La migración prepara esos campos y valida el backfill.
+- No se crean lotes históricos con vencimiento inventado: los lotes de apertura quedan sin fecha y sin procedencia histórica.
+
 ## Pendientes que bloquean la activación final
 1. Aplicar la migración de lecturas solo en un entorno de staging, después de revisar el SQL.
 2. Ejecutar pruebas reales con usuario ADMIN de staging: historial, búsqueda, disponibilidad, devolución parcial y total, efectivo, Yape/Plin, crédito, reintento idempotente y dos solicitudes concurrentes.
