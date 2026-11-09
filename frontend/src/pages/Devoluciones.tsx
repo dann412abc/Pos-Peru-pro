@@ -172,7 +172,8 @@ export default function Devoluciones() {
       await recargar();
     } catch (error: any) {
       const status = Number(error?.response?.status || 0);
-      if (!ES_SUPABASE_AUTH && [400, 401, 403, 404, 409, 422].includes(status)) localStorage.removeItem(claveStorage);
+      // Solo conservamos la clave ante timeout/5xx u otra respuesta ambigua; los 4xx son rechazos definitivos.
+      if ([400, 401, 403, 404, 409, 422].includes(status)) localStorage.removeItem(claveStorage);
       toast.error(error?.response?.data?.message || 'No se confirmó la devolución. Reintente con los mismos datos.');
     } finally { setGuardando(false); }
   }
