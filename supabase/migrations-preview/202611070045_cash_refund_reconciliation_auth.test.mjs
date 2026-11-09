@@ -25,3 +25,15 @@ test('both RPCs remain authenticated and scoped to owned cash register',()=>{
  assert.match(sql,/GRANT EXECUTE ON FUNCTION public\.pos_caja_resumen_auth\(integer\) TO authenticated/);
  assert.match(sql,/GRANT EXECUTE ON FUNCTION public\.pos_caja_movimientos_listar_auth\(integer\) TO authenticated/);
 });
+
+test('cash summary includes manual movements in every tender and subtracts refunds',()=>{
+ assert.match(sql,/v_mov_tarjeta/);
+ assert.match(sql,/v_mov_yape/);
+ assert.match(sql,/v_mov_plin/);
+ assert.match(sql,/v_efectivo,0\)-COALESCE\(v_dev_efectivo,0\)\+COALESCE\(v_mov_efectivo,0\)/);
+ assert.match(sql,/v_tarjeta,0\)-COALESCE\(v_dev_tarjeta,0\)\+COALESCE\(v_mov_tarjeta,0\)/);
+});
+test('cash summary reports net sales after registered returns',()=>{
+ assert.match(sql,/GREATEST\(0,c\.total-COALESCE\(d\.total_devuelto,0\)\)/);
+ assert.match(sql,/totalDevoluciones/);
+});
