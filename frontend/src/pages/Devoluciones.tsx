@@ -117,7 +117,7 @@ export default function Devoluciones() {
       const response = ES_SUPABASE_AUTH
         ? await searchSupabaseReturnReceipts(q, sucursalId)
         : (await api.get('/devoluciones/ventas/buscar', { params: { q, sucursalId } })).data;
-      setVentas((response || []).filter((v: VentaResumen) => ['01', '03'].includes(v.tipo) && v.estado !== 'ANULADA'));
+      setVentas((response || []).filter((v: VentaResumen) => ['01', '03', 'NV'].includes(v.tipo) && v.estado !== 'ANULADA'));
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'No se pudo buscar el comprobante');
     } finally { setCargando(false); }
