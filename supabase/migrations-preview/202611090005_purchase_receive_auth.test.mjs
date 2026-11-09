@@ -58,3 +58,11 @@ test('payment handling enforces one open cashbox and excludes transfers from cas
   assert.match(sql, /INSERT INTO public\.caja_movimiento/);
   assert.match(sql, /IF cash_id IS NOT NULL THEN/);
 });
+
+test('RPC validates direct-call document/payment fields and locks selected variants', () => {
+  assert.match(sql, /length\(doc_series\)>12/);
+  assert.match(sql, /length\(doc_number\)>30/);
+  assert.match(sql, /length\(COALESCE\(payment->>'referencia',''\)\)>120/);
+  assert.match(sql, /length\(COALESCE\(line->>'codigoLote',''\)\)>80/);
+  assert.match(sql, /FOR UPDATE;/);
+});
