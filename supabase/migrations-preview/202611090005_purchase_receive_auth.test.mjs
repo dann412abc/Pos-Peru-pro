@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const sql = fs.readFileSync('supabase/migrations-preview/202611090005_purchase_receive_auth.sql', 'utf8');
+const here = path.dirname(fileURLToPath(import.meta.url));
+const sql = fs.readFileSync(path.join(here, '202611090005_purchase_receive_auth.sql'), 'utf8');
 
 test('purchase receive RPC is preview-only and guarded by prerequisite schema', () => {
   assert.match(sql, /PREVIEW ONLY/);
@@ -71,4 +74,17 @@ test('direct payload rejects missing payment condition and non-array lines', () 
   assert.match(sql, /pay_condition IS NULL OR pay_condition NOT IN/);
   assert.match(sql, /jsonb_typeof\(p_payload->'lineas'\) IS DISTINCT FROM 'array'/);
   assert.match(sql, /jsonb_array_length\(COALESCE\(p_payload->'lineas','\[\]'::jsonb\)\)/);
+});
+
+
+test('cash available for supplier receipt deducts registered cash refunds', () => {
+  assert.match(sql, /FROM public\.devolucion_venta_pago dp[\s\S]*?JOIN public\.devolucion_venta d ON d\.id=dp\.devolucion_id AND d\.empresa_id=dp\.empresa_id[\s\S]*?WHERE d\.caja_id=cash_row\.id AND d\.empresa_id=company_id[\s\S]*?d\.estado='REGISTRADA' AND dp\.metodo_pago='EFECTIVO'/);
+  assert.match(sql, /SELECT cash_available-COALESCE\(sum\(dp\.monto\),0\)/);
+  assert.ok(sql.indexOf('SELECT cash_available-COALESCE(sum(dp.monto),0)') < sql.indexOf('IF cash_out>cash_available'));
+});
+
+test('purchase stock receipt preserves variant identity and creates lot trace for the same variant', () => {
+  assert.match(sql, /INSERT INTO public\.inventario_lote\(empresa_id,sucursal_id,producto_id,variante_id,compra_id,compra_linea_id/);
+  assert.match(sql, /UPDATE public\.producto_variante_stock SET stock=stock_after,costo_promedio=avg_after/);
+  assert.match(sql, /VALUES\(company_id,branch_id,product_id,variant_id,purchase_id,purchase_line_id,batch_code,expiry_date,qty,qty,unit_cost\)/);
 });
