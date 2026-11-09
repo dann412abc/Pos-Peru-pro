@@ -95,12 +95,23 @@ async function readSnapshot(client, spec) {
     assert.equal(r.rowCount, 1, 'credit customer fixture row must exist');
     credit = Number(r.rows[0].saldo_credito);
   }
-  return { counts: counts.rows[0], stock, credit };
+  let lots = [];
+  if (spec.stock?.productId) {
+    const r = await client.query(
+      'SELECT id,codigo_lote,fecha_vencimiento,cantidad_disponible FROM public.inventario_lote WHERE empresa_id=$1 AND sucursal_id=$2 AND producto_id=$3 AND variante_id IS NOT DISTINCT FROM $4 ORDER BY fecha_vencimiento ASC NULLS LAST,created_at ASC,id ASC',
+      [spec.empresaId, spec.sucursalId, spec.stock.productId, spec.stock.variantId ?? null]
+    );
+    lots = r.rows.map(row => ({
+      id: Number(row.id), code: row.codigo_lote, expiry: row.fecha_vencimiento,
+      available: Number(row.cantidad_disponible)
+    }));
+  }
+  return { counts: counts.rows[0], stock, credit, lots };
 }
 
 async function invokeSale(client, payload) {
   const r = await client.query(
-    'SELECT public.pos_venta_crear_auth($1::jsonb) AS result',
+    'SELECT public.pos_registrar_venta_fefo_auth($1::jsonb) AS result',
     [JSON.stringify(payload)]
   );
   return r.rows[0].result;
@@ -119,6 +130,38 @@ test('staging harness requires explicit opt-in and a fixture', { skip: !enabled 
       try {
         await beginAsAuthenticated(client, fixture.authUserId);
         await setPrivilegedAssertionRole(client);
+        if (scenario.purchasePrerequisite) {
+          await setAuthenticatedRole(client);
+          const purchase = await client.query(
+            'SELECT public.pos_compra_recibir_auth($1::jsonb) AS result',
+            [JSON.stringify(scenario.purchasePrerequisite.payload)]
+          );
+          const received = purchase.rows[0].result;
+          assert.equal(received.ok, true, JSON.stringify(received));
+          assert.ok(received.compraId, 'prerequisite purchase must return compraId');
+          assert.equal(received.repetida, false);
+          await setPrivilegedAssertionRole(client);
+          const receivedHeader = await client.query(
+            'SELECT estado,empresa_id,sucursal_id FROM public.compra WHERE id=$1',
+            [received.compraId]
+          );
+          assert.equal(receivedHeader.rowCount, 1);
+          assert.equal(receivedHeader.rows[0].estado, 'RECIBIDA');
+          assert.equal(Number(receivedHeader.rows[0].empresa_id), Number(scenario.empresaId));
+          assert.equal(Number(receivedHeader.rows[0].sucursal_id), Number(scenario.sucursalId));
+          const receivedLots = await client.query(
+            'SELECT codigo_lote,cantidad_inicial,cantidad_disponible,fecha_vencimiento FROM public.inventario_lote WHERE compra_id=$1 ORDER BY id',
+            [received.compraId]
+          );
+          assert.equal(receivedLots.rowCount, scenario.purchasePrerequisite.expected.lotCount);
+          for (const lot of receivedLots.rows) {
+            assert.ok(Math.abs(Number(lot.cantidad_inicial) - Number(lot.cantidad_disponible)) < 0.001);
+          }
+          if (scenario.purchasePrerequisite.expected.lotCodes) {
+            assert.deepEqual(receivedLots.rows.map(row => row.codigo_lote),
+              scenario.purchasePrerequisite.expected.lotCodes);
+          }
+        }
         const before = await readSnapshot(client, scenario);
         await setAuthenticatedRole(client);
         const result = await invokeSale(client, scenario.payload);
@@ -169,13 +212,26 @@ test('staging harness requires explicit opt-in and a fixture', { skip: !enabled 
             'stock delta must match fixture');
         }
 
-        if (scenario.expected.fefoLotIds) {
+        if (scenario.expected.fefoLotIds || scenario.expected.fefoLotCodes) {
           const allocations = await client.query(
-            `SELECT lote_id FROM public.comprobante_lote_salida
-             WHERE comprobante_id=$1 ORDER BY id`,
+            'SELECT cls.lote_id,il.codigo_lote FROM public.comprobante_lote_salida cls JOIN public.inventario_lote il ON il.id=cls.lote_id WHERE cls.comprobante_id=$1 ORDER BY cls.id',
             [result.comprobanteId]
           );
-          assert.deepEqual(allocations.rows.map(x => Number(x.lote_id)), scenario.expected.fefoLotIds);
+          if (scenario.expected.fefoLotIds) {
+            assert.deepEqual(allocations.rows.map(x => Number(x.lote_id)), scenario.expected.fefoLotIds);
+          }
+          if (scenario.expected.fefoLotCodes) {
+            assert.deepEqual(allocations.rows.map(x => x.codigo_lote), scenario.expected.fefoLotCodes);
+          }
+        }
+        if (scenario.expected.lotAvailabilityAfterSale) {
+          const afterLots = await readSnapshot(client, scenario);
+          for (const expectedLot of scenario.expected.lotAvailabilityAfterSale) {
+            const actual = afterLots.lots.find(lot => lot.code === expectedLot.code);
+            assert.ok(actual, 'expected lot ' + expectedLot.code + ' must exist');
+            assert.ok(Math.abs(actual.available - Number(expectedLot.available)) < 0.001,
+              'lot ' + expectedLot.code + ' available quantity must match after FEFO sale');
+          }
         }
 
         if (scenario.expected.creditDelta !== undefined) {
@@ -187,7 +243,9 @@ test('staging harness requires explicit opt-in and a fixture', { skip: !enabled 
         const afterFirst = await readSnapshot(client, scenario);
         await setAuthenticatedRole(client);
         const replay = await invokeSale(client, scenario.payload);
-        assert.equal(replay.decision, 'RETURN_EXISTING');
+        assert.equal(replay.decision, 'SALE_CONFIRMED');
+        assert.equal(replay.repetida, true);
+        assert.equal(replay.idempotentReplay, true);
         assert.equal(Number(replay.comprobanteId), Number(result.comprobanteId));
         await setPrivilegedAssertionRole(client);
         const afterReplay = await readSnapshot(client, scenario);
@@ -216,7 +274,7 @@ test('staging harness requires explicit opt-in and a fixture', { skip: !enabled 
         thrown = error;
       }
       assert.ok(thrown, 'rollback scenario must fail');
-      assert.match(String(thrown.message), new RegExp(spec.expectedError || 'SALE_FEFO_LOTS_INSUFFICIENT_OR_EXPIRED'));
+      assert.match(String(thrown.message), new RegExp(spec.expectedError || 'SALE_FEFO_STOCK_MISMATCH'));
       await client.query('ROLLBACK TO SAVEPOINT before_expected_failure');
       await setPrivilegedAssertionRole(client);
       const after = await readSnapshot(client, spec);
@@ -257,7 +315,9 @@ test('concurrencia idempotente de dos sesiones (requiere permiso explícito para
     const secondPromise = invokeSale(second, scenario.payload);
     await first.query('COMMIT');
     const secondResult = await secondPromise;
-    assert.equal(secondResult.decision, 'RETURN_EXISTING');
+    assert.equal(secondResult.decision, 'SALE_CONFIRMED');
+    assert.equal(secondResult.repetida, true);
+    assert.equal(secondResult.idempotentReplay, true);
     assert.equal(Number(secondResult.comprobanteId), Number(firstResult.comprobanteId));
 
     await setPrivilegedAssertionRole(second);
@@ -296,6 +356,12 @@ test('concurrencia idempotente de dos sesiones (requiere permiso explícito para
     await first.end();
     await second.end();
   }
+});
+
+test('el runner invoca el wrapper FEFO autenticado y no el escritor legacy', () => {
+  const source = readFileSync(new URL('./sales-transaction-staging.integration.test.mjs', import.meta.url), 'utf8');
+  assert.match(source, /pos_registrar_venta_fefo_auth/);
+  assert.doesNotMatch(source, /SELECT public\\.pos_venta_crear_auth/);
 });
 
 test('sin POS_SALES_STAGING_CONFIRM=YES no abre conexiones ni toca la base', { skip: enabled }, () => {
