@@ -14,14 +14,15 @@ test('el arnés exige doble confirmación y fixture antes de conectarse', () => 
 test('el arnés deriva identidad JWT de prueba y asume rol authenticated', () => {
   assert.match(runner, /request\.jwt\.claim\.sub/);
   assert.match(runner, /SET LOCAL ROLE authenticated/);
-  assert.match(runner, /pos_venta_crear_auth/);
+  assert.match(runner, /pos_registrar_venta_fefo_auth/);
+  assert.doesNotMatch(runner, /SELECT public\\.pos_venta_crear_auth/);
 });
 
 test('los escenarios normales revierten la transacción y el fallo usa savepoint', () => {
   assert.match(runner, /await client\.query\('ROLLBACK'\)/);
   assert.match(runner, /SAVEPOINT before_expected_failure/);
   assert.match(runner, /ROLLBACK TO SAVEPOINT before_expected_failure/);
-  assert.match(runner, /SALE_FEFO_LOTS_INSUFFICIENT_OR_EXPIRED/);
+  assert.match(runner, /SALE_FEFO_STOCK_MISMATCH/);
 });
 
 test('la concurrencia con commit exige una confirmación adicional', () => {
@@ -51,4 +52,18 @@ test('la prueba concurrente verifica efectos financieros e inventario exactament
 test('el caso concurrente exige conteos esperados explícitos antes de confirmar', () => {
   assert.match(runner, /scenario\.expected\?\.\[field\]/);
   assert.match(runner, /must be a non-negative integer/);
+});
+
+test('la venta usa el wrapper FEFO y captura el saldo de cada lote', () => {
+  assert.match(runner, /pos_registrar_venta_fefo_auth/);
+  assert.match(runner, /cantidad_disponible/);
+  assert.match(runner, /lotAvailabilityAfterSale/);
+  assert.match(runner, /fefoLotCodes/);
+});
+
+test('permite recibir una compra y vender su lote en la misma transacción', () => {
+  assert.match(runner, /purchasePrerequisite/);
+  assert.match(runner, /pos_compra_recibir_auth/);
+  assert.match(runner, /receivedLots/);
+  assert.match(runner, /ROLLBACK/);
 });
