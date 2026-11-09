@@ -66,3 +66,9 @@ test('RPC validates direct-call document/payment fields and locks selected varia
   assert.match(sql, /length\(COALESCE\(line->>'codigoLote',''\)\)>80/);
   assert.match(sql, /FOR UPDATE;/);
 });
+
+test('direct payload rejects missing payment condition and non-array lines', () => {
+  assert.match(sql, /pay_condition IS NULL OR pay_condition NOT IN/);
+  assert.match(sql, /jsonb_typeof\(p_payload->'lineas'\) IS DISTINCT FROM 'array'/);
+  assert.match(sql, /jsonb_array_length\(COALESCE\(p_payload->'lineas','\[\]'::jsonb\)\)/);
+});
