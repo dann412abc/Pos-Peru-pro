@@ -8,7 +8,7 @@ test('purchase receipt fields are guarded and transaction-wrapped',()=>{
   assert.match(sql,/PURCHASE_RECEIPT_PREREQUISITES_MISSING/);
   assert.match(sql,/PURCHASE_IDEMPOTENCY_INDEX_MISSING/);
   assert.match(sql,/^BEGIN;/);
-  assert.match(sql,/COMMIT;\\s*$/);
+  assert.match(sql,/COMMIT;\s*$/);
 });
 
 test('credit due date is persisted and constrained against document date',()=>{
@@ -18,7 +18,7 @@ test('credit due date is persisted and constrained against document date',()=>{
 });
 
 test('idempotency payload hash has a strict normalized format',()=>{
-  assert.match(sql,/ADD COLUMN IF NOT EXISTS payload_hash varchar\\(32\\)/);
+  assert.match(sql,/ADD COLUMN IF NOT EXISTS payload_hash varchar\(32\)/);
   assert.match(sql,/payload_hash ~/);
   assert.match(sql,/0-9a-f/);
   assert.match(sql,/uq_compra_empresa_idempotency/);
