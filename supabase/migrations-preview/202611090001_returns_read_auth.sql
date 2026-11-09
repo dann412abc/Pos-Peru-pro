@@ -78,7 +78,7 @@ BEGIN
     FROM public.comprobante c
     JOIN public.cliente cl ON cl.id=c.cliente_id AND cl.empresa_id=c.empresa_id
     WHERE c.empresa_id=v_empresa AND (p_sucursal_id IS NULL OR c.sucursal_id=p_sucursal_id)
-      AND c.tipo IN ('01','03','NV') AND c.estado<>'ANULADA'
+      AND c.tipo IN ('01','03') AND c.estado<>'ANULADA'
       AND public.mi_puede_ver_sucursal(c.sucursal_id)
       AND (c.serie ILIKE '%'||v_q||'%' OR c.correlativo::text ILIKE '%'||v_q||'%'
         OR (c.serie||'-'||lpad(c.correlativo::text,8,'0')) ILIKE '%'||v_q||'%'
