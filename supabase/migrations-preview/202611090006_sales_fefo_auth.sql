@@ -82,7 +82,7 @@ BEGIN
     pg_catalog.hashtextextended('pos:venta:'||v_empresa||':'||v_key,0)
   );
 
-  SELECT c.id,c.sucursal_id,c.request_hash
+  SELECT c.id,c.sucursal_id,c.request_hash,c.serie,c.correlativo,c.fecha_emision,c.caja_id,c.total,c.estado
     INTO v_existente
   FROM public.comprobante c
   WHERE c.empresa_id=v_empresa AND c.idempotency_key=v_key
@@ -106,6 +106,12 @@ BEGIN
     END IF;
     RETURN jsonb_build_object(
       'id',v_existente.id,
+      'serie',v_existente.serie,
+      'correlativo',v_existente.correlativo,
+      'fechaEmision',v_existente.fecha_emision,
+      'cajaId',v_existente.caja_id,
+      'total',v_existente.total,
+      'estado',v_existente.estado,
       'repetida',true,
       'trazabilidadFEFO',true
     );
