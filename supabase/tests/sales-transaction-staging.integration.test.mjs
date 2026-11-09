@@ -361,7 +361,7 @@ test('concurrencia idempotente de dos sesiones (requiere permiso explícito para
 test('el runner invoca el wrapper FEFO autenticado y no el escritor legacy', () => {
   const source = readFileSync(new URL('./sales-transaction-staging.integration.test.mjs', import.meta.url), 'utf8');
   assert.match(source, /pos_registrar_venta_fefo_auth/);
-  assert.doesNotMatch(source, /SELECT public\\.pos_venta_crear_auth/);
+  assert.doesNotMatch(source, /SELECT public\.pos_venta_crear_auth/);
 });
 
 test('sin POS_SALES_STAGING_CONFIRM=YES no abre conexiones ni toca la base', { skip: enabled }, () => {
