@@ -5,10 +5,10 @@ import path from 'node:path';
 const edge = fs.readFileSync(path.join(process.cwd(),'frontend/functions/api/edge/[[path]].js'),'utf8');
 const client = fs.readFileSync(path.join(process.cwd(),'frontend/src/api/supabaseReturns.ts'),'utf8');
 
-test('return register endpoint invokes the existing transactional RPC with the exact argument contract',()=>{
+test('return register endpoint invokes the authenticated FEFO RPC with the exact payload contract',()=>{
   assert.match(edge,/route === 'returns\/register'/);
-  assert.match(edge,/pos_registrar_devolucion/);
-  for (const arg of ['p_comprobante_id','p_motivo','p_lineas','p_pagos','p_idempotency_key']) assert.ok(edge.includes(arg));
+  assert.match(edge,/pos_devolucion_registrar_auth/);
+  assert.match(edge,/p_comprobante_id:\s*comprobanteId/);\n  assert.match(edge,/p_payload:\s*\\{/);\n  for (const arg of ['motivo','idempotencyKey','lineas','pagos']) assert.ok(edge.includes(arg));
   assert.match(edge,/authorization: `Bearer \${token}`/);
 });
 
@@ -29,6 +29,6 @@ test('Supabase return client keeps authenticated session and validates the commi
 });
 
 test('return client does not claim preflight is the final write operation',()=>{
-  assert.match(client,/pos_registrar_devolucion/);
+  assert.match(client,/registerSupabaseReturn/);
   assert.match(client,/preflightSupabaseReturn/);
 });
