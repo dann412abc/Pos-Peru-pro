@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Lock, Store } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { supabaseAuthSetPassword } from '../api/supabaseAuth';
+import { supabaseAuthSetPassword, supabaseAuthVerifyRecovery } from '../api/supabaseAuth';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
