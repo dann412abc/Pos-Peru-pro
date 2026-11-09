@@ -29,8 +29,9 @@ BEGIN
 END
 $guard$;
 
--- One lock namespace per company/branch is shared by the count lifecycle and
--- every stock-row write, including legacy RPCs that do not know about counts.
+-- Stock writes are guarded at the table boundary, including legacy RPCs.
+-- Opening briefly takes conflicting table locks so the snapshot cannot race
+-- with an in-flight stock write; subsequent writes see the committed open count.
 CREATE OR REPLACE FUNCTION public.pos_inventario_conteo_bloquear_stock_trigger()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -54,10 +55,6 @@ BEGIN
   IF TG_OP='UPDATE' AND NEW.stock IS NOT DISTINCT FROM OLD.stock THEN
     RETURN NEW;
   END IF;
-
-  PERFORM pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended('pos:inventory-count:'||v_empresa||':'||v_sucursal,0)
-  );
 
   v_close_id:=NULLIF(pg_catalog.current_setting('pos.inventory_count_close_id',true),'');
   IF v_close_id IS NOT NULL THEN
@@ -96,9 +93,9 @@ CREATE TRIGGER trg_inventario_conteo_bloquear_variante_stock
 BEFORE INSERT OR UPDATE OF stock OR DELETE ON public.producto_variante_stock
 FOR EACH ROW EXECUTE FUNCTION public.pos_inventario_conteo_bloquear_stock_trigger();
 
--- Opening a count takes the same branch lock before its row is inserted.
--- The lock is held until the snapshot transaction commits, so stock writes
--- either finish before the snapshot or observe the newly-open count afterward.
+-- Opening a count briefly blocks stock-table writers before inserting the
+-- count row. Existing writes finish before the snapshot; later writes resume
+-- only after commit and are rejected by the row triggers.
 CREATE OR REPLACE FUNCTION public.pos_inventario_conteo_bloquear_apertura_trigger()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -107,9 +104,7 @@ SET search_path=''
 AS $trigger$
 BEGIN
   IF NEW.estado='ABIERTO' THEN
-    PERFORM pg_catalog.pg_advisory_xact_lock(
-      pg_catalog.hashtextextended('pos:inventory-count:'||NEW.empresa_id||':'||NEW.sucursal_id,0)
-    );
+    LOCK TABLE public.producto_stock,public.producto_variante_stock IN SHARE ROW EXCLUSIVE MODE;
   END IF;
   RETURN NEW;
 END;
@@ -121,9 +116,8 @@ CREATE TRIGGER trg_inventario_conteo_serializar_apertura
 BEFORE INSERT ON public.inventario_conteo
 FOR EACH ROW EXECUTE FUNCTION public.pos_inventario_conteo_bloquear_apertura_trigger();
 
--- Closing holds the branch lock for the entire adjustment transaction and
--- sets a transaction-local, count-specific capability consumed by the stock
--- trigger only while this exact open count is being finalized.
+-- Closing sets a transaction-local, count-specific capability consumed by
+-- the stock trigger only while this exact open count is being finalized.
 CREATE OR REPLACE FUNCTION public.pos_inventario_conteo_cerrar_auth(p_conteo_id bigint)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
 AS $function$
@@ -138,10 +132,6 @@ BEGIN
   SELECT * INTO v_cab FROM public.inventario_conteo
   WHERE id=p_conteo_id AND empresa_id=v_empresa AND public.mi_puede_ver_sucursal(sucursal_id);
   IF NOT FOUND THEN RAISE EXCEPTION 'INVENTORY_COUNT_NOT_FOUND'; END IF;
-
-  PERFORM pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended('pos:inventory-count:'||v_cab.empresa_id||':'||v_cab.sucursal_id,0)
-  );
 
   SELECT * INTO v_cab FROM public.inventario_conteo
   WHERE id=p_conteo_id AND empresa_id=v_empresa AND public.mi_puede_ver_sucursal(sucursal_id)
