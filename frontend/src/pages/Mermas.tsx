@@ -13,7 +13,7 @@ const motivos:Record<string,string>={VENCIDO:'Producto vencido',DANADO:'Producto
 export default function Mermas(){
  const {usuario}=useAuth();const [lotes,setLotes]=useState<Lote[]>([]);const [historial,setHistorial]=useState<Merma[]>([]);
  const [loteId,setLoteId]=useState('');const [cantidad,setCantidad]=useState('1');const [motivoTipo,setMotivoTipo]=useState('VENCIDO');const [observacion,setObservacion]=useState('');
- const [cargando,setCargando]=useState(false);const [guardando,setGuardando]=useState(false);const [error,setError]=useState('');
+ const [cargando,setCargando]=useState(false);const [guardando,setGuardando]=useState(false);const [error,setError]=useState('');const [mermaKey,setMermaKey]=useState(()=>crypto.randomUUID());
  const cargar=useCallback(async()=>{if(ES_MODO_DEMO||!usuario?.sucursalId)return;setCargando(true);setError('');try{
   if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
    const [a,b]=await Promise.all([listarLotesMermaSupabase(Number(usuario.sucursalId)),listarMermasSupabase(Number(usuario.sucursalId))]);
@@ -32,7 +32,7 @@ export default function Mermas(){
   if(observacion.trim().length<5){toast.error('Describe el motivo con al menos 5 caracteres');return;}
   if(!window.confirm(`Se descontarán ${qty(n)} unidades del lote ${lote.codigoLote}. Costo estimado de la merma: ${money(n*Number(lote.costoUnitario))}. ¿Confirmas?`))return;
   setGuardando(true);try{
-   const idempotencyKey = crypto.randomUUID();
+   const idempotencyKey = mermaKey;
    if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
     if (!lote.productoId) throw new Error('El lote no contiene el producto asociado; actualiza el esquema de mermas en staging.');
     await registrarMermaSupabase({
@@ -44,7 +44,7 @@ export default function Mermas(){
    } else {
     await api.post('/inventario/mermas',{loteId:lote.id,cantidad:n,motivoTipo,observacion:observacion.trim(),idempotencyKey});
    }
-   toast.success('Merma registrada y stock actualizado');setCantidad('1');setObservacion('');await cargar();
+   toast.success('Merma registrada y stock actualizado');setCantidad('1');setObservacion('');setMermaKey(crypto.randomUUID());await cargar();
   }catch(e:any){toast.error(e?.response?.data?.message||'No se pudo registrar la merma');}finally{setGuardando(false);}
  }
  function exportar(){const cols=['Fecha','Sucursal','Producto','Presentación','Lote','Motivo','Observación','Cantidad','Costo unitario','Costo total','Usuario'];const rows=historial.map(x=>[new Date(x.createdAt).toLocaleString('es-PE'),x.sucursalNombre,x.productoNombre,x.varianteNombre||'',x.codigoLote,motivos[x.motivoTipo]||x.motivoTipo,x.observacion,x.cantidad,x.costoUnitario,x.costoTotal,x.usuarioNombre]);const csv=[cols,...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='historial-mermas.csv';a.click();URL.revokeObjectURL(url);}
@@ -61,7 +61,7 @@ export default function Mermas(){
     <div><label className="label">Motivo</label><select className="input w-full" value={motivoTipo} onChange={e=>setMotivoTipo(e.target.value)}>{Object.entries(motivos).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>
     <div><label className="label">Observación / sustento</label><textarea className="input w-full min-h-20" maxLength={500} value={observacion} onChange={e=>setObservacion(e.target.value)} placeholder="Ej. Producto vencido detectado durante revisión..." required/></div>
     <button disabled={guardando||!lote} className="btn-primario w-full flex items-center justify-center gap-2">{guardando?'Registrando…':'Registrar merma'}</button>
-    <p className="text-xs text-gray-500">La operación descuenta el lote y el stock de la presentación/producto en una transacción, y registra el movimiento y el responsable.</p>
+    <p className="text-xs text-gray-500">En Supabase, la baja se registra en una sola operación: descuenta el stock, consume lotes por FEFO y guarda el historial. La clave se conserva si hay un error para permitir reintentar sin duplicar.</p>
    </form>
    <div className="card p-4 space-y-3 xl:col-span-2">
     <div className="flex flex-wrap justify-between items-center gap-2"><h3 className="font-semibold flex items-center gap-2"><ClipboardList size={18}/> Historial de mermas</h3><button onClick={exportar} className="btn-secundario flex items-center gap-2"><Download size={16}/> Exportar CSV</button></div>
