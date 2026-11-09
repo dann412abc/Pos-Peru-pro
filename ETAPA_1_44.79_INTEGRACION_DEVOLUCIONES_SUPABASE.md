@@ -177,3 +177,17 @@ Corrección preparada en la rama:
 - Se actualiza la prueba estática para exigir la eliminación del índice real.
 
 No se ejecutó la migración ni se modificó Supabase. La corrección queda pendiente de validación automatizada y de aplicación en un entorno aislado.
+
+
+## Cierre del bloqueo de cálculo IGV — fuente legacy comprobada
+
+Se localizó el motor real de compras en `backend/src/compras/compra-calculations.ts` y su suite `compra-calculations.spec.ts`. Ya no es necesario inferir el tratamiento tributario:
+
+- El costo unitario ingresado **incluye IGV**, igual que los precios del catálogo POS.
+- Para tipo IGV `10` (gravado): `importe = cantidad × costo_unitario`; `base_imponible = redondear2(importe / 1.18)`; `igv = redondear2(importe - base_imponible)`; `subtotal = base_imponible + igv`. El total pagable no aumenta por encima del importe ingresado.
+- Para tipo `20` (exonerado) y `30` (inafecto): la base de la línea es el importe, IGV es cero y subtotal es igual al importe.
+- La recepción convierte primero empaques a unidades base: cantidad = empaques × unidades_por_empaque (3 decimales); costo unitario = costo_empaque / unidades_por_empaque (4 decimales).
+- La compra verifica que el tipo IGV enviado coincida con el tipo IGV del producto del catálogo. La futura RPC debe repetir esta validación; no debe confiar en el valor enviado por el navegador.
+- La suite existente cubre un ejemplo gravado (118 → base 100 + IGV 18), exonerado, inafecto, conversión de caja a unidades y costo promedio ponderado.
+
+Por tanto, el bloqueo tributario queda resuelto con una regla concreta y respaldada por el backend legacy. La RPC Supabase puede implementar el mismo algoritmo y redondeos, manteniendo la cantidad/costo unitario en unidades base. Aún falta traducirlo a SQL y contrastar sus columnas con el esquema real; no se considera implementado hasta completar esa integración y probarla.
