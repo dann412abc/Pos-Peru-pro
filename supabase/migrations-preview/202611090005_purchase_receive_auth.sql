@@ -195,7 +195,7 @@ BEGIN
    WHERE ps.producto_id=product_id AND ps.empresa_id=company_id AND ps.sucursal_id=branch_id FOR UPDATE;
   END IF;
   stock_after:=round(stock_before+qty,3);
-  avg_after:=round(((stock_before*avg_before)+(qty*unit_cost))/(stock_before+qty),4);
+  avg_after:=round(((stock_before*COALESCE(avg_before,0))+(qty*unit_cost))/(stock_before+qty),4);
   amount:=round(qty*unit_cost,2);
   IF product_row.tipo_igv=10 THEN base_amount:=round(amount/1.18,2);tax_amount:=round(amount-base_amount,2);
   ELSE base_amount:=amount;tax_amount:=0; END IF;
