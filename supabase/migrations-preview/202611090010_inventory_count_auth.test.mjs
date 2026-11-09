@@ -12,7 +12,10 @@ test('physical count migration creates protected header and line tables', () => 
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.inventario_conteo\s*\(/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.inventario_conteo_linea\s*\(/);
   assert.match(migration, /uq_inventario_conteo_abierto_sucursal/);
-  assert.match(migration, /ENABLE ROW LEVEL SECURITY/);\n  assert.match(migration, /variante_id bigint,/);
+  assert.match(migration, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(migration, /variante_id bigint,/);
+  assert.match(migration, /INVENTORY_COUNT_SCHEMA_INCOMPATIBLE/);
+  assert.match(migration, /uq_producto_variante_id_producto_empresa/);
 });
 
 test('physical count RPCs require auth and branch authorization', () => {
@@ -20,7 +23,7 @@ test('physical count RPCs require auth and branch authorization', () => {
     assert.ok(migration.includes(fn));
   }
   assert.match(migration, /public\.mi_puede_ver_sucursal/);
-  assert.match(migration, /public\.mi_rol\(\) IS DISTINCT FROM 'ADMIN'/);
+  assert.match(migration, /public\.mi_rol\(\) IS DISTINCT FROM 'ADMIN'/);\n  assert.equal((migration.match(/public\\.mi_rol\\(\\) IS DISTINCT FROM 'ADMIN'/g) || []).length, 5);
 });
 
 test('closing applies each difference through the lot-aware adjustment RPC', () => {
