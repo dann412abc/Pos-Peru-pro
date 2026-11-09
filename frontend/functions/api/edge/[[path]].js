@@ -456,12 +456,34 @@ export async function onRequest({ request, env, params }) {
       return json({ error: 'INVALID_PURCHASE_PAYLOAD', message: 'La solicitud de recepción no tiene el formato esperado.' }, 400);
     }
     const payload = body.payload;
-    if (!Number.isSafeInteger(Number(payload.sucursalId)) || Number(payload.sucursalId) <= 0 ||
-        !Number.isSafeInteger(Number(payload.proveedorId)) || Number(payload.proveedorId) <= 0 ||
+    const validPositive = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0;
+    const validNonNegative = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+    const validLine = (line) => line && typeof line === 'object' && !Array.isArray(line) &&
+      Number.isSafeInteger(line.productoId) && line.productoId > 0 &&
+      (line.varianteId == null || (Number.isSafeInteger(line.varianteId) && line.varianteId > 0)) &&
+      validPositive(line.cantidad) && typeof line.unidadCompra === 'string' && line.unidadCompra.trim().length > 0 &&
+      validPositive(line.unidadesPorEmpaque) && validPositive(line.costoEmpaque) &&
+      validPositive(line.costoUnitario) && Number.isInteger(line.tipoIgv) && line.tipoIgv >= 0 &&
+      (line.codigoLote == null || (typeof line.codigoLote === 'string' && line.codigoLote.length <= 80)) &&
+      (line.fechaVencimiento == null || (typeof line.fechaVencimiento === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(line.fechaVencimiento)));
+    const validMethods = new Set(['EFECTIVO','YAPE','PLIN','TARJETA','TRANSFERENCIA']);
+    const validPayment = (payment) => payment && typeof payment === 'object' && !Array.isArray(payment) &&
+      validMethods.has(payment.metodoPago) && validPositive(payment.monto) &&
+      (payment.cajaId == null || (Number.isSafeInteger(payment.cajaId) && payment.cajaId > 0)) &&
+      (payment.referencia == null || (typeof payment.referencia === 'string' && payment.referencia.length <= 160));
+    if (!Number.isSafeInteger(payload.sucursalId) || payload.sucursalId <= 0 ||
+        !Number.isSafeInteger(payload.proveedorId) || payload.proveedorId <= 0 ||
+        !['CONTADO','CREDITO'].includes(payload.condicionPago) ||
+        typeof payload.tipoDocumento !== 'string' || !payload.tipoDocumento.trim() ||
+        typeof payload.serie !== 'string' || !payload.serie.trim() ||
+        typeof payload.numero !== 'string' || !payload.numero.trim() ||
+        typeof payload.fechaDocumento !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(payload.fechaDocumento) ||
+        (payload.condicionPago === 'CREDITO' && (typeof payload.fechaVencimiento !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(payload.fechaVencimiento) || payload.fechaVencimiento < payload.fechaDocumento)) ||
         typeof payload.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(payload.idempotencyKey) ||
-        !Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 200 ||
-        !Array.isArray(payload.pagos) || payload.pagos.length > 20) {
-      return json({ error: 'INVALID_PURCHASE_PAYLOAD', message: 'Verifica sucursal, proveedor, clave de idempotencia, líneas y pagos.' }, 400);
+        !Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 200 || !payload.lineas.every(validLine) ||
+        !Array.isArray(payload.pagos) || payload.pagos.length > 20 || !payload.pagos.every(validPayment) ||
+        (payload.condicionPago === 'CREDITO' && payload.pagos.length > 0)) {
+      return json({ error: 'INVALID_PURCHASE_PAYLOAD', message: 'Verifica sucursal, proveedor, documento, condición de pago, líneas, cantidades, costos y pagos.' }, 400);
     }
     const encoded = JSON.stringify({ p_payload: payload });
     if (encoded.length > 64_000) return json({ error: 'PURCHASE_PAYLOAD_TOO_LARGE', message: 'La compra supera el tamaño permitido.' }, 413);
