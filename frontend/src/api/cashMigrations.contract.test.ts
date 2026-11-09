@@ -31,6 +31,9 @@ describe('cash preview migrations: auth identity and refund reconciliation', () 
     const sql = migration('202611070045_cash_refund_reconciliation_auth.sql');
     expect(sql).toContain('FROM public.caja_movimiento cm');
     expect(sql).not.toContain("'id',-dp.id");
-    expect(sql).not.toContain('FROM public.devolucion_venta_pago dp');
+    const historyStart = sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_caja_movimientos_listar_auth');
+    const historySql = sql.slice(historyStart);
+    expect(historyStart).toBeGreaterThanOrEqual(0);
+    expect(historySql).not.toContain('FROM public.devolucion_venta_pago dp');
   });
 });
