@@ -6,7 +6,7 @@ AS $fn$
 DECLARE
  v_auth uuid:=auth.uid(); v_usuario integer; v_empresa integer; v_sucursal integer;
  v_saldo numeric(12,2); v_ventas integer; v_total numeric(12,2);
- v_efectivo numeric(12,2); v_tarjeta numeric(12,2); v_yape numeric(12,2); v_plin numeric(12,2); v_credito numeric(12,2);
+ v_efectivo numeric(12,2); v_efectivo_fisico numeric(12,2); v_tarjeta numeric(12,2); v_yape numeric(12,2); v_plin numeric(12,2); v_credito numeric(12,2);
  v_mov_efectivo numeric(12,2); v_dev_total numeric(12,2); v_dev_efectivo numeric(12,2);
  v_dev_tarjeta numeric(12,2); v_dev_yape numeric(12,2); v_dev_plin numeric(12,2);
  v_efectivo_esperado numeric(12,2);
@@ -33,6 +33,17 @@ BEGIN
   WHERE c.caja_id=p_caja_id AND c.empresa_id=v_empresa AND c.estado <> 'ANULADA'
    AND NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=c.id)
  ) cobros;
+ -- El efectivo físico conserva cobros de ventas anuladas; sus reembolsos
+ -- ya están persistidos como SALIDA en caja_movimiento y no deben duplicarse.
+ SELECT COALESCE(SUM(monto),0) INTO v_efectivo_fisico
+ FROM (
+  SELECT cp.monto FROM public.comprobante_pago cp JOIN public.comprobante c ON c.id=cp.comprobante_id
+  WHERE c.caja_id=p_caja_id AND c.empresa_id=v_empresa AND cp.metodo_pago='EFECTIVO'
+  UNION ALL
+  SELECT c.total FROM public.comprobante c
+  WHERE c.caja_id=p_caja_id AND c.empresa_id=v_empresa AND c.metodo_pago='EFECTIVO'
+   AND NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=c.id)
+ ) efectivo_fisico;
  SELECT COALESCE(SUM(d.total_devolucion),0) INTO v_dev_total
  FROM public.devolucion_venta d
  WHERE d.caja_id=p_caja_id AND d.empresa_id=v_empresa AND d.estado='REGISTRADA';
@@ -49,7 +60,7 @@ BEGIN
  FILTER(WHERE metodo_pago='EFECTIVO'),0) INTO v_mov_efectivo
  FROM public.caja_movimiento WHERE caja_id=p_caja_id AND usuario_id=v_usuario;
  -- Los reembolsos ya generan una SALIDA en caja_movimiento; no restarlos dos veces.
- v_efectivo_esperado:=round(COALESCE(v_saldo,0)+COALESCE(v_efectivo,0)+COALESCE(v_mov_efectivo,0),2);
+ v_efectivo_esperado:=round(COALESCE(v_saldo,0)+COALESCE(v_efectivo_fisico,0)+COALESCE(v_mov_efectivo,0),2);
  RETURN jsonb_build_object(
  'cantidadVentas',v_ventas,'totalVentas',v_total,'totalDevoluciones',round(COALESCE(v_dev_total,0),2),
  'porMetodo',jsonb_build_object(
