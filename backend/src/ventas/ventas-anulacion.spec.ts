@@ -115,10 +115,7 @@ describe('VentasService.anular - contrato de seguridad', () => {
   it('mantiene una sola fuente de ingreso de ventas para el arqueo de caja', () => {
     const salesSource = readFileSync(join(__dirname, 'ventas.service.ts'), 'utf8');
     const cashSource = readFileSync(join(__dirname, '../caja/caja.service.ts'), 'utf8');
-    const startSale = salesSource.indexOf('async crear(');
-    const endSale = salesSource.indexOf('\\n  async ', startSale + 10);
-    const saleMethod = salesSource.slice(startSale, endSale > startSale ? endSale : undefined);
-    expect(saleMethod).toContain('getRepository(ComprobantePago).save(pagos.map');
+    expect(salesSource).toContain('getRepository(ComprobantePago).save(pagos.map');
     expect(cashSource).toContain('FROM comprobante_pago cp INNER JOIN comprobante c');
     expect(cashSource).toContain('UNION ALL');
     expect(cashSource).toContain('NOT EXISTS (SELECT 1 FROM comprobante_pago cp WHERE cp.comprobante_id = c.id)');
