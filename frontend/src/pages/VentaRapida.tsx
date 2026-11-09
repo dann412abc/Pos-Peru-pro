@@ -124,7 +124,7 @@ export default function VentaRapida() {
           id: Number(cajaResp.data.id), fechaApertura: String(cajaResp.data.fechaApertura || new Date().toISOString()),
           saldoInicial: Number(cajaResp.data.saldoInicial || 0), estado: 'Abierta' as const,
           usuarioId: String(usuario?.id || ''), sucursalId: String(sucursalId),
-        } : mapCaja(cajaResp.data)) : null;
+        } : { id: Number(cajaResp.data.id), fechaApertura: String(cajaResp.data.fechaApertura || new Date().toISOString()), saldoInicial: Number(cajaResp.data.saldoInicial || 0), estado: 'Abierta' as const, usuarioId: String(usuario?.id || ''), sucursalId: String(sucursalId) }) : null;
         if (cajaMapeada) await db.cash_register.put(cajaMapeada);
         setCajaAbierta(!!cajaMapeada && cajaMapeada.estado === 'Abierta');
       } catch (error) {
@@ -165,7 +165,7 @@ export default function VentaRapida() {
         enCola: false,
       };
       const existente = await db.ventas.where('idempotencyKey').equals(intento.idempotencyKey).first();
-      if (existente?.id) await db.ventas.update(existente.id, ventaRecuperada);
+      if (existente?.id) await db.ventas.put({ ...ventaRecuperada, id: existente.id });
       else await db.ventas.add(ventaRecuperada);
       limpiarClaveVentaSupabase(storageKey);
       setRecuperacionPendiente(null);
