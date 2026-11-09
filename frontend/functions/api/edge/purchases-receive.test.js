@@ -39,3 +39,12 @@ test('purchases/receive rechaza pagos no permitidos y crédito con pago inicial'
   const r2 = await onRequest({ request: new Request('https://pos.test/api/edge/purchases/receive', { method: 'POST', headers: { authorization: 'Bearer test-token' }, body: JSON.stringify({ payload: invalidCredit }) }), env, params });
   assert.equal(r2.status, 400);
 });
+
+test('purchases/receive aplica tipos IGV permitidos y evita líneas duplicadas por producto/variante', async () => {
+  const invalidIgv = { ...base, lineas: [{ ...base.lineas[0], tipoIgv: 0 }] };
+  const r1 = await onRequest({ request: new Request('https://pos.test/api/edge/purchases/receive', { method: 'POST', headers: { authorization: 'Bearer test-token' }, body: JSON.stringify({ payload: invalidIgv }) }), env, params });
+  assert.equal(r1.status, 400);
+  const duplicated = { ...base, lineas: [base.lineas[0], { ...base.lineas[0] }] };
+  const r2 = await onRequest({ request: new Request('https://pos.test/api/edge/purchases/receive', { method: 'POST', headers: { authorization: 'Bearer test-token' }, body: JSON.stringify({ payload: duplicated }) }), env, params });
+  assert.equal(r2.status, 400);
+});
