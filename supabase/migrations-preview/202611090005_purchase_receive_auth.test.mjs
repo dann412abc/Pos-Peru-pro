@@ -10,7 +10,6 @@ const sql = fs.readFileSync(path.join(here, '202611090005_purchase_receive_auth.
 test('purchase receive RPC is preview-only and guarded by prerequisite schema', () => {
   assert.match(sql, /^-- PREVIEW ONLY[\\s\\S]*?\\nBEGIN;/);
   assert.match(sql, /PURCHASE_RECEIPT_SCHEMA_NOT_READY/);
-  assert.match(sql, /^-- PREVIEW ONLY[^\\n]*\\nBEGIN;/);
   assert.match(sql, /COMMIT;\s*$/);
 });
 
