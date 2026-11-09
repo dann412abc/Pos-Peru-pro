@@ -226,9 +226,9 @@ export async function onRequest({ request, env, params }) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
         !Number.isSafeInteger(Number(payload.sucursalId)) || Number(payload.sucursalId) <= 0 ||
         typeof payload.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(payload.idempotencyKey) ||
+        !['01','03','NV'].includes(payload.tipo) ||
         !Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 200 || !payload.lineas.every(validLine) ||
-        new Set(payload.lineas.map(line => `${line.productoId}:${line.varianteId ?? 'base'}`)).size !== payload.lineas.length ||
-        !Array.isArray(payload.pagos) || payload.pagos.length > 20 || !payload.pagos.every(validPayment)) {
+        !Array.isArray(payload.pagos) || payload.pagos.length < 1 || payload.pagos.length > 5 || !payload.pagos.every(validPayment)) {
       return json({ error: 'INVALID_SALES_IDEMPOTENCY_QUERY', message: 'Verifica sucursal, clave, productos, cantidades, precios, descuentos y pagos.' }, 400);
     }
     const encoded = JSON.stringify({ p_payload: payload });
