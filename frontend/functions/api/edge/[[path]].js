@@ -134,7 +134,7 @@ export async function onRequest({ request, env, params }) {
     if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
     try {
       // La función SQL usa auth.uid(); nunca se acepta un usuario_id del navegador.
-      const response = await fetch(new URL('/rest/v1/rpc/pos_mi_perfil_auth', supabase), {
+      const response = await fetch(new URL('/rest/v1/rpc/mi_perfil_pos', supabase), {
         method: 'POST',
         headers: {
           apikey: env.SUPABASE_ANON_KEY,
