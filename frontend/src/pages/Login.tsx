@@ -40,7 +40,11 @@ export default function Login() {
     if (!correoRecuperacion.trim() || !correoRecuperacion.includes('@')) { toast.error('Ingresa un correo válido'); return; }
     setRecuperando(true);
     try { await supabaseAuthRecover(correoRecuperacion); toast.success('Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña.'); }
-    catch { toast.error('No se pudo solicitar la recuperación. Verifica la configuración de correo de Supabase.'); }
+    catch (err: any) {
+      const data = err?.response?.data;
+      const detail = data?.providerMessage ? ` Detalle Supabase: ${data.providerMessage}` : '';
+      toast.error(`${data?.message || err?.message || 'No se pudo solicitar la recuperación.'}${detail}`);
+    }
     finally { setRecuperando(false); }
   }
 
