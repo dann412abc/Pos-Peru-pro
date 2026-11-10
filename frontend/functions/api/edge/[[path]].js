@@ -109,7 +109,22 @@ export async function onRequest({ request, env, params }) {
         method: 'POST', headers: { apikey: env.SUPABASE_ANON_KEY, 'content-type': 'application/json' },
         body: JSON.stringify({ email: body.email.trim().toLowerCase(), redirect_to: body.redirect_to }),
       });
-      if (!response.ok) return json({ error: 'RECOVERY_REQUEST_FAILED', message: 'No se pudo solicitar la recuperación.' }, response.status === 429 ? 429 : 502);
+      if (!response.ok) {
+        const providerError = await response.json().catch(() => ({}));
+        const providerCode = String(providerError.code || providerError.error_code || providerError.error || 'RECOVERY_REQUEST_FAILED').slice(0, 80);
+        const providerMessage = String(providerError.msg || providerError.message || providerError.error_description || '').slice(0, 240);
+        const status = response.status === 429 ? 429 : response.status === 400 ? 400 : 502;
+        return json({
+          error: 'RECOVERY_REQUEST_FAILED',
+          code: providerCode,
+          message: status === 429
+            ? 'Se solicitaron demasiados enlaces. Espera unos minutos e inténtalo otra vez.'
+            : status === 400
+              ? 'Supabase rechazó la solicitud. Revisa el correo y la URL de retorno permitida.'
+              : 'Supabase Auth no pudo enviar el correo. Revisa la configuración SMTP y los registros de Auth.',
+          providerMessage: providerMessage || undefined,
+        }, status);
+      }
       return json({ ok: true, message: 'Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña.' });
     } catch { return json({ error: 'AUTH_PROVIDER_UNAVAILABLE' }, 502); }
   }
