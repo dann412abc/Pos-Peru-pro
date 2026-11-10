@@ -8,27 +8,19 @@ SECURITY DEFINER
 SET search_path=pg_catalog,public,auth
 AS $fn$
 DECLARE
-  v_auth uuid := auth.uid();
-  v_usuario integer;
-  v_empresa integer;
+  v_usuario integer := public.mi_usuario_id();
+  v_empresa integer := public.mi_empresa_id();
   v_cajas jsonb;
 BEGIN
-  IF v_auth IS NULL THEN
-    RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000';
+  IF auth.uid() IS NULL OR v_usuario IS NULL OR v_empresa IS NULL THEN
+    RAISE EXCEPTION 'Sesión no autenticada o usuario POS no vinculado/inactivo' USING ERRCODE='42501';
   END IF;
 
-  SELECT u.id,u.empresa_id INTO v_usuario,v_empresa
-  FROM public.usuario u
-  WHERE u.supabase_auth_user_id=v_auth AND u.activo=true;
-  IF v_usuario IS NULL THEN
-    RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501';
-  END IF;
-
-  IF p_sucursal_id IS NULL OR NOT EXISTS (
-    SELECT 1 FROM public.usuario_sucursal us
-    JOIN public.sucursal s ON s.id=us.sucursal_id
-    WHERE us.usuario_id=v_usuario AND us.sucursal_id=p_sucursal_id AND s.empresa_id=v_empresa
-  ) THEN
+  IF p_sucursal_id IS NULL OR NOT public.mi_puede_ver_sucursal(p_sucursal_id)
+     OR NOT EXISTS (
+       SELECT 1 FROM public.sucursal s
+       WHERE s.id=p_sucursal_id AND s.empresa_id=v_empresa
+     ) THEN
     RAISE EXCEPTION 'Sucursal no autorizada' USING ERRCODE='42501';
   END IF;
 
