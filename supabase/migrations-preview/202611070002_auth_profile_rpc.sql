@@ -1,6 +1,7 @@
--- PREVIEW SOLAMENTE. NO EJECUTAR EN PRODUCCION SIN VALIDAR ESQUEMA Y VINCULOS.
--- Resuelve exclusivamente la cuenta POS asociada al UUID autenticado.
--- No permite elegir usuario_id desde el cliente ni vincular por email/username.
+-- PREVIEW SOLAMENTE. Validado contra el esquema actual de POS AYNI PERU.
+-- Resuelve exclusivamente el usuario POS asociado a auth.uid() mediante
+-- public.usuario.auth_user_id (columna UUID existente). No acepta usuario_id
+-- desde el cliente y no realiza vinculaciones por correo o nombre de usuario.
 CREATE OR REPLACE FUNCTION public.pos_mi_perfil_auth()
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -30,7 +31,7 @@ BEGIN
   )
   INTO v_result
   FROM public.usuario u
-  WHERE u.supabase_auth_user_id = v_user_id
+  WHERE u.auth_user_id = v_user_id
     AND u.activo = true;
 
   IF v_result IS NULL THEN
@@ -48,4 +49,4 @@ REVOKE ALL ON FUNCTION public.pos_mi_perfil_auth() FROM anon;
 GRANT EXECUTE ON FUNCTION public.pos_mi_perfil_auth() TO authenticated;
 
 COMMENT ON FUNCTION public.pos_mi_perfil_auth() IS
-'Retorna únicamente el perfil POS vinculado a auth.uid(); no acepta identificadores del cliente.';
+'Retorna únicamente el perfil POS vinculado a auth.uid() mediante usuario.auth_user_id; no acepta identificadores del cliente.';
