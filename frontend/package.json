@@ -6,7 +6,7 @@
   "description": "Mi Carrito POS - Sistema de facturación electrónica POS para Perú",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && node scripts/build.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:pages-proxy": "node --test tests/api/proxy.test.js",
