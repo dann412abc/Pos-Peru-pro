@@ -75,7 +75,7 @@ BEGIN
       WHERE ps.empresa_id = v_empresa_id AND ps.sucursal_id = v_sucursal_id
     ), '[]'::jsonb),
     'stock_variantes', COALESCE((
-      SELECT jsonb_agg(to_jsonb(vs) ORDER BY vs.producto_id, vs.variante_id)
+      SELECT jsonb_agg(to_jsonb(vs) ORDER BY vs.variante_id)
       FROM public.producto_variante_stock vs
       WHERE vs.empresa_id = v_empresa_id AND vs.sucursal_id = v_sucursal_id
     ), '[]'::jsonb),
