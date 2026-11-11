@@ -105,9 +105,13 @@ export async function onRequest({ request, env, params }) {
     try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
     if (typeof body.email !== 'string' || !body.email.includes('@')) return json({ error: 'EMAIL_REQUIRED', message: 'Ingresa un correo válido.' }, 400);
     try {
-      const response = await fetch(new URL('/auth/v1/recover', supabase), {
+      const recoveryUrl = new URL('/auth/v1/recover', supabase);
+      if (typeof body.redirect_to === 'string' && body.redirect_to.startsWith('https://')) {
+        recoveryUrl.searchParams.set('redirect_to', body.redirect_to);
+      }
+      const response = await fetch(recoveryUrl, {
         method: 'POST', headers: { apikey: env.SUPABASE_ANON_KEY, 'content-type': 'application/json' },
-        body: JSON.stringify({ email: body.email.trim().toLowerCase(), redirect_to: body.redirect_to }),
+        body: JSON.stringify({ email: body.email.trim().toLowerCase() }),
       });
       if (!response.ok) {
         const providerError = await response.json().catch(() => ({}));
