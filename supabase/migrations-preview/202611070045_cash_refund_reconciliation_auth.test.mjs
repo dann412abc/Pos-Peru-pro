@@ -5,6 +5,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const sql=fs.readFileSync(path.join(here,'202611070045_cash_refund_reconciliation_auth.sql'),'utf8');
+const historySql=fs.readFileSync(path.join(here,'202611070044_cash_movements_history_auth.sql'),'utf8');
+test('cash summary and history resolve users through the real auth_user_id column',()=>{
+ assert.match(sql,/auth_user_id=v_auth/);
+ assert.match(historySql,/auth_user_id=v_auth/);
+ assert.doesNotMatch(sql+historySql,/supabase_auth_user_id/);
+});
+
 test('cash summary subtracts refunds by actual refund payment method',()=>{
  assert.match(sql,/devolucion_venta_pago/);
  assert.match(sql,/v_dev_efectivo/);
