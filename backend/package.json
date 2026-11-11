@@ -20,12 +20,13 @@
     "test:purchases:staging": "node --test ../supabase/tests/purchase-receipt-staging.integration.test.mjs",
     "test:purchases:static": "node --test ../supabase/migrations-preview/202611090005_purchase_receive_auth.test.mjs ../supabase/migrations-preview/202611090047_purchase_sales_lot_flow_contract.test.mjs ../supabase/tests/purchase-staging-harness.test.mjs",
     "test:returns:staging": "node --test ../supabase/tests/returns-transaction-staging.integration.test.mjs",
-    "test:returns:static": "node --test ../supabase/tests/returns-staging-harness.test.mjs ../supabase/tests/returns-transaction-staging.integration.test.mjs ../supabase/migrations-preview/202611090003_returns_register_fefo_auth.test.mjs ../supabase/migrations-preview/202611090012_returns_transactional_writer_auth.test.mjs"
+    "test:returns:static": "node --test ../supabase/tests/returns-staging-harness.test.mjs ../supabase/tests/returns-transaction-staging.integration.test.mjs ../supabase/migrations-preview/202611090003_returns_register_fefo_auth.test.mjs ../supabase/migrations-preview/202611090012_returns_transactional_writer_auth.test.mjs",
+    "test:pos:e2e:staging": "node --test ../supabase/tests/pos-end-to-end-transaction-staging.integration.test.mjs"
   },
   "dependencies": {
     "@nestjs/bull": "^10.1.1",
     "@nestjs/common": "^10.3.0",
-    "@nestjs/config": "^3.1.1",
+    "@nestjs/config": "^3.1.0",
     "@nestjs/core": "^10.3.0",
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/passport": "^10.0.3",
