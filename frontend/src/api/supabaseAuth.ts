@@ -24,7 +24,7 @@ export async function supabaseAuthLogout(accessToken: string): Promise<void> {
   await axios.post(`${EDGE}/auth/logout`, {}, { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 10000 });
 }
 export async function supabaseAuthRecover(email: string): Promise<void> {
-  await axios.post(`${EDGE}/auth/recover`, { email: email.trim().toLowerCase(), redirect_to: `${window.location.origin}/reset-password` }, { timeout: 15000 });
+  await axios.post(`${EDGE}/auth/recover`, { email: email.trim().toLowerCase(), redirect_to: `${window.location.origin.includes('fix-password-recovery-flow.pos-peru-pro.pages.dev') ? window.location.origin : 'https://fix-password-recovery-flow.pos-peru-pro.pages.dev'}/reset-password` }, { timeout: 15000 });
 }
 export async function supabaseAuthVerifyRecovery(tokenHash: string): Promise<string> {
   const response = await axios.post(`${EDGE}/auth/recovery/verify`, { token_hash: tokenHash }, { timeout: 15000 });
