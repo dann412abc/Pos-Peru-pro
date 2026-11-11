@@ -6,10 +6,12 @@ const sql=fs.readFileSync('supabase/migrations-preview/202611090012_returns_tran
 const fefo=fs.readFileSync('supabase/migrations-preview/202611090003_returns_register_fefo_auth.sql','utf8');
 const cash=fs.readFileSync('supabase/migrations-preview/202611070045_cash_refund_reconciliation_auth.sql','utf8');
 
-test('transactional return writer is the exact dependency invoked by the FEFO wrapper',()=>{
+test('transactional return writer is internal and only the FEFO wrapper is exposed',()=>{
  assert.match(sql,/FUNCTION public\.pos_registrar_devolucion\(\s*p_comprobante_id integer,\s*p_motivo text,\s*p_lineas jsonb,\s*p_pagos jsonb,\s*p_idempotency_key text/s);
  assert.match(fefo,/public\.pos_registrar_devolucion\(/);
- assert.match(sql,/GRANT EXECUTE ON FUNCTION public\.pos_registrar_devolucion\(integer,text,jsonb,jsonb,text\) TO authenticated/);
+ assert.match(sql,/REVOKE ALL ON FUNCTION public\.pos_registrar_devolucion\(integer,text,jsonb,jsonb,text\) FROM PUBLIC,anon,authenticated/);
+ assert.doesNotMatch(sql,/GRANT EXECUTE ON FUNCTION public\.pos_registrar_devolucion/);
+ assert.match(fefo,/GRANT EXECUTE ON FUNCTION public\.pos_devolucion_registrar_auth\(integer,jsonb\) TO authenticated/);
 });
 test('return commit is idempotent and all stock, receivable and cash effects share one transaction',()=>{
  for(const marker of ['pg_advisory_xact_lock','request_hash','devolucion_venta_linea','producto_stock','producto_variante_stock','cuenta_cobrar','devolucion_venta_pago','caja_movimiento'])
