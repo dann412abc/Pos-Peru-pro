@@ -52,7 +52,9 @@ export default function ResetPassword() {
       toast.success('Contraseña actualizada. Ya puedes iniciar sesión.');
       navigate('/login', { replace: true });
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'No se pudo actualizar la contraseña. Solicita un enlace nuevo.');
+      const data = error?.response?.data;
+      const detail = data?.providerMessage ? ` Detalle Supabase: ${data.providerMessage}` : '';
+      toast.error(`${data?.message || error?.message || 'No se pudo actualizar la contraseña.'}${detail}`);
     } finally { setGuardando(false); }
   }
 
