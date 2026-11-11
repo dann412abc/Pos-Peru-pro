@@ -166,6 +166,7 @@ export default function Productos() {
         }
         const payload = {
           id: editando?.id,
+          sucursal_id: Number(usuario?.sucursalId),
           codigo: form.codigo.trim(),
           codigo_barras: form.tieneVariantes ? null : (form.codigoBarras?.trim() || null),
           tiene_variantes: Boolean(form.tieneVariantes),
@@ -407,6 +408,7 @@ export default function Productos() {
     try {
       const payload = {
         producto_id: productoVariantes.id,
+        sucursal_id: Number(usuario?.sucursalId),
         codigo: formVariante.codigo.trim(),
         codigoBarras: formVariante.codigoBarras?.trim() || undefined,
         nombre: formVariante.nombre.trim(),
