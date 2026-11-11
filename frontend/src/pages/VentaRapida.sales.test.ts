@@ -14,7 +14,8 @@ describe('barrera de cobro Supabase', () => {
   it('protege contra doble clic y conserva carrito si RPC falla', () => {
     expect(source).toMatch(/if \(cobroEnCurso\.current\) return/);
     expect(source).toMatch(/cobroEnCurso\.current = false/);
-    expect(source).toMatch(/await crearVentaSupabase\(payloadSupabase\)/);\n    expect(source).toMatch(/VITE_SUPABASE_SALES_ENABLED !== 'true'/);
+    expect(source).toMatch(/await crearVentaSupabase\(payloadSupabase\)/);
+    expect(source).toMatch(/VITE_SUPABASE_SALES_ENABLED !== 'true'/);
   });
 
   it('solo vacía carrito tras finalizar el flujo sin excepción', () => {
