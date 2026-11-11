@@ -8,7 +8,7 @@ export default defineConfig({
   test: {
     // La suite de Vitest cubre pruebas unitarias del frontend.
     // Los contratos de Cloudflare/Edge y Supabase se ejecutan por sus pasos Node dedicados en CI.
-    include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
+    include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}', 'functions/api/edge/edge.test.js'],
     environment: 'node',
   },
   server: {
