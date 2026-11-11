@@ -29,10 +29,16 @@ export async function onRequestPost({ request, env }) {
       body: JSON.stringify({ password: body.password }),
     });
     if (!response.ok) {
-      const status = response.status === 401 || response.status === 403 ? 401 : response.status === 422 ? 400 : 502;
-      return json({ error: 'PASSWORD_UPDATE_FAILED', message: status === 401
-        ? 'El enlace de recuperación venció o ya fue utilizado. Solicita uno nuevo.'
-        : 'Supabase no pudo actualizar la contraseña.' }, status);
+      const providerError = await response.json().catch(() => ({}));
+      const providerCode = String(providerError.code || providerError.error_code || providerError.error || 'PASSWORD_UPDATE_FAILED').slice(0, 100);
+      const providerMessage = String(providerError.msg || providerError.message || providerError.error_description || '').slice(0, 240);
+      const status = response.status === 401 || response.status === 403 ? 401 : response.status === 422 || response.status === 400 ? 400 : 502;
+      const message = status === 401
+        ? 'La sesión de recuperación venció o ya fue utilizada. Solicita un enlace nuevo.'
+        : status === 400
+          ? 'Supabase rechazó la nueva contraseña. Comprueba sus requisitos e inténtalo otra vez.'
+          : 'Supabase Auth no pudo actualizar la contraseña. Revisa los registros de Auth.';
+      return json({ error: 'PASSWORD_UPDATE_FAILED', code: providerCode, message, providerMessage: providerMessage || undefined }, status);
     }
     return json({ ok: true });
   } catch {
