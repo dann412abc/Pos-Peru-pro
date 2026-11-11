@@ -38,6 +38,23 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+      - name: Report exact npm dependency vulnerabilities and safe fixes
+        working-directory: frontend
+        run: |
+          npm audit --json > /tmp/npm-audit.json || true
+          node --input-type=commonjs -e '
+            const a=require("/tmp/npm-audit.json");
+            console.log("AUDIT_SUMMARY", JSON.stringify(a.metadata?.vulnerabilities || {}));
+            for (const [name,v] of Object.entries(a.vulnerabilities || {})) {
+              const via=(v.via || []).map(x => typeof x === "string" ? x : ({name:x.name,title:x.title,range:x.range,url:x.url}));
+              console.log("AUDIT_PACKAGE", JSON.stringify({name,severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via}));
+            }
+          '
+          npm audit fix --dry-run --json > /tmp/npm-audit-fix.json || true
+          node --input-type=commonjs -e '
+            const a=require("/tmp/npm-audit-fix.json");
+            console.log("AUDIT_FIX_DRY_RUN", JSON.stringify({added:a.added,removed:a.removed,changed:a.changed,audit:a.audit?.metadata?.vulnerabilities || a.metadata?.vulnerabilities || null}));
+          '
       - name: Validate cash register contracts
         working-directory: frontend
         run: npm run test:cash-contract
