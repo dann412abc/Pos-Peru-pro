@@ -51,8 +51,8 @@ test('ningún flujo normal confirma datos y los fallos esperados usan savepoint'
   assert.doesNotMatch(returns, /await client\.query\('COMMIT'\)/);
 });
 
-test('la prueba de concurrencia que confirma datos requiere una segunda autorización', () => {
+test('la concurrencia con commit requiere autorización adicional y devoluciones no confirman', () => {
   assert.match(purchases, /POS_PURCHASE_ALLOW_COMMIT_TESTS === 'YES'/);
   assert.match(sales, /POS_SALES_ALLOW_COMMIT_TESTS === 'YES'/);
-  assert.match(returns, /does not match/); // devoluciones no habilitan commit concurrente
+  assert.doesNotMatch(returns, /await client\.query\('COMMIT'\)/);
 });
