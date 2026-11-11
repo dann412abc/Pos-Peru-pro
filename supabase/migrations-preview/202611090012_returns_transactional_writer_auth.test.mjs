@@ -65,3 +65,8 @@ test('returns writer fails fast when identity helpers or required schema columns
 test('transactional writer preserves notes for the dedicated cancellation flow',()=>{
  assert.ok(sql.includes("v_venta.tipo NOT IN ('01','03','NV')"));
 });
+
+test('legacy return idempotency hashes remain valid for pending retries after upgrade',()=>{
+ assert.ok(sql.includes("v_hash_legacy:=md5(jsonb_build_object('motivo',v_motivo,'lineas',p_lineas,'pagos',p_pagos)::text)"));
+ assert.ok(sql.includes("v_existente.request_hash IS DISTINCT FROM v_hash_legacy"));
+});
