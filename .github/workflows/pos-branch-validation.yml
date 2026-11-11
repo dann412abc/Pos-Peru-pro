@@ -80,6 +80,9 @@ jobs:
       - name: Validate POS Supabase catalog UI contract
         working-directory: frontend
         run: node --test tests/contracts/pos-supabase-catalog-ui-contract.test.mjs
+      - name: Run complete frontend unit test suite
+        working-directory: frontend
+        run: npm test
       - name: Type-check and build frontend
         working-directory: frontend
         run: npm run build
