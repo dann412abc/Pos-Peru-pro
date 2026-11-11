@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Activity, AlertTriangle, CalendarClock, Package, RefreshCw, ShoppingBag, TrendingDown, TrendingUp, Wallet, CreditCard, Banknote, Trash2 } from 'lucide-react';
-import { api, ES_MODO_DEMO } from '../api/client';
+import { api, ES_MODO_DEMO, ES_SUPABASE_AUTH } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatearMoneda } from '../utils/igv';
 
@@ -34,6 +34,12 @@ export default function Dashboard() {
   const cargar = useCallback(async () => {
     if (ES_MODO_DEMO || usuario?.rol !== 'ADMIN' || !usuario?.sucursalId) return;
     setCargando(true); setError('');
+    if (ES_SUPABASE_AUTH) {
+      setData(null);
+      setError('El Dashboard gerencial todavía no está migrado a Supabase. No se consultó la API heredada ni se modificó información.');
+      setCargando(false);
+      return;
+    }
     try {
       const r = await api.get('/gastos/reportes/dashboard-gerencial');
       setData(r.data as DashboardData);

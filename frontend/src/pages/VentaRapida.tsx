@@ -47,6 +47,7 @@ function catalogoVariantes(catalog: Awaited<ReturnType<typeof fetchCurrentSupaba
 export default function VentaRapida() {
   const { usuario } = useAuth();
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [errorCatalogo, setErrorCatalogo] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('TODOS');
   const [lineas, setLineas] = useState<LineaVenta[]>([]);
@@ -106,6 +107,7 @@ export default function VentaRapida() {
           categoria: p.categoria?.nombre || (p.categoriaId ? `Categoría ${p.categoriaId}` : 'General'),
         })));
         if (!activo) return;
+        setErrorCatalogo('');
         setProductos(prods);
         await db.productos.bulkPut(prods);
         const clientesNormalizados = catalogoSupabase
@@ -127,8 +129,15 @@ export default function VentaRapida() {
         } : { id: Number(cajaResp.data.id), fechaApertura: String(cajaResp.data.fechaApertura || new Date().toISOString()), saldoInicial: Number(cajaResp.data.saldoInicial || 0), estado: 'Abierta' as const, usuarioId: String(usuario?.id || ''), sucursalId: String(sucursalId) }) : null;
         if (cajaMapeada) await db.cash_register.put(cajaMapeada);
         setCajaAbierta(!!cajaMapeada && cajaMapeada.estado === 'Abierta');
-      } catch (error) {
+      } catch (error: any) {
         if (activo) {
+          const status = Number(error?.response?.status);
+          const code = String(error?.response?.data?.error || '');
+          if (status === 409 && code === 'CATALOG_MIGRATION_REQUIRED') {
+            setErrorCatalogo('El catálogo de Supabase aún no está habilitado en este entorno. Falta instalar la función segura pos_catalogo_base_auth. No se han perdido tus productos ni se ha registrado ninguna venta.');
+          } else {
+            setErrorCatalogo(error instanceof Error ? error.message : 'No se pudieron cargar los datos del catálogo.');
+          }
           const cache = await db.productos.filter(esProductoActivo).toArray();
           const cajasCache = await db.cash_register.where('estado').equals('Abierta').toArray();
           setProductos(cache);
@@ -668,6 +677,7 @@ export default function VentaRapida() {
           </div>
         </div>
 
+        {errorCatalogo && <div role="alert" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{errorCatalogo}</div>}
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
           {productosFiltrados.map((p) => (
             <button
