@@ -59,3 +59,8 @@ test('returns writer fails fast when identity helpers or required schema columns
    'producto_stock','producto_variante_stock','updated_at','monto_revertido','devolucion_venta_linea'])
   assert.ok(sql.includes(marker),marker);
 });
+
+test('transactional writer preserves notes for the dedicated cancellation flow',()=>{
+ assert.match(sql,/v_venta\\.tipo NOT IN \\('\\''01'\\'',\\s*'\\''03'\\'',\\s*'\\''NV'\\''\\)/);
+});
+
