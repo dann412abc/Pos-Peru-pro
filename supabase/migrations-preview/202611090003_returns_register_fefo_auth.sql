@@ -250,6 +250,7 @@ DECLARE
   v_motivo text := trim(coalesce(p_motivo,''));
   v_motivo_devolucion text;
   v_hash text;
+  v_hash_legacy text;
   v_resultado jsonb;
   v_existente public.devolucion_venta%ROWTYPE;
 BEGIN
@@ -322,6 +323,10 @@ BEGIN
     ) ORDER BY x->>'metodoPago'),'[]'::jsonb)
       FROM jsonb_array_elements(p_pagos) x)
   )::text) INTO v_hash;
+  -- Compatibilidad con anulaciones y reintentos guardados por la versión anterior.
+  v_hash_legacy:=md5(jsonb_build_object(
+    'motivo',v_motivo_devolucion,'lineas',v_lineas,'pagos',p_pagos
+  )::text);
 
   SELECT d.* INTO v_existente
   FROM public.devolucion_venta d
@@ -331,7 +336,8 @@ BEGIN
   IF FOUND THEN
     IF v_existente.comprobante_id<>p_comprobante_id
        OR left(v_existente.motivo,length(v_prefijo))<>v_prefijo
-       OR v_existente.request_hash IS DISTINCT FROM v_hash THEN
+       OR (v_existente.request_hash IS DISTINCT FROM v_hash
+           AND v_existente.request_hash IS DISTINCT FROM v_hash_legacy) THEN
       RAISE EXCEPTION 'La clave de anulación ya fue utilizada con otros datos';
     END IF;
     IF v_comprobante.estado<>'ANULADA' THEN
