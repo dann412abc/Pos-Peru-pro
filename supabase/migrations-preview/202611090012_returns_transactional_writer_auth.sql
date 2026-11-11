@@ -188,7 +188,7 @@ BEGIN
   IF NOT public.mi_puede_ver_sucursal(v_venta.sucursal_id) THEN
     RAISE EXCEPTION 'Sucursal no autorizada' USING ERRCODE='42501';
   END IF;
-  IF v_venta.tipo NOT IN ('01','03') OR v_venta.estado='ANULADA' THEN
+  IF v_venta.tipo NOT IN ('01','03','NV') OR v_venta.estado='ANULADA' THEN
     RAISE EXCEPTION 'Solo se pueden devolver boletas o facturas vigentes' USING ERRCODE='22023';
   END IF;
 
