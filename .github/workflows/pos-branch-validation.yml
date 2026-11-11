@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: pos-validation-${{ github.ref }}
@@ -38,6 +38,17 @@ jobs:
       - name: Generate lockfile for reviewed patched dependencies
         working-directory: frontend
         run: npm install --package-lock-only --ignore-scripts --no-audit
+      - name: Commit regenerated npm lockfile to working branch
+        run: |
+          if ! git diff --quiet -- frontend/package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add frontend/package-lock.json
+            git commit -m "Update lockfile with patched frontend dependencies"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          else
+            echo "The npm lockfile is already current."
+          fi
       - name: Install frontend dependencies from lockfile
         working-directory: frontend
         run: npm ci
