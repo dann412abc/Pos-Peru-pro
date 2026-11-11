@@ -16,7 +16,7 @@
     "test:edge-smoke": "vitest run tests/api/edge/edge.test.js",
     "test:returns-contract": "cd .. && node --test supabase/migrations-preview/202611070043_cash_register_lifecycle_auth.test.mjs supabase/migrations-preview/202611070045_cash_refund_reconciliation_auth.test.mjs supabase/migrations-preview/202611090003_returns_register_fefo_auth.test.mjs supabase/migrations-preview/202611090012_returns_transactional_writer_auth.test.mjs frontend/tests/api/edge/returns-register-contract.test.mjs frontend/tests/api/edge/returns-supabase-gate.test.mjs",
     "test:preview-auth-build": "node --test scripts/build.test.mjs",
-    "test:recovery-redirect": "node --test scripts/recovery-redirect.test.mjs"
+    "test:recovery-redirect": "node --test scripts/recovery-redirect.test.mjs tests/api/edge/auth-recovery-redirect-contract.test.mjs"
   },
   "dependencies": {
     "axios": "^1.6.8",
