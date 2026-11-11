@@ -55,3 +55,10 @@ test('nota cancellation retry hash uses the same canonical payload as the transa
   assert.ok(cancel.includes("request_hash IS DISTINCT FROM v_hash"));
   assert.ok(cancel.includes("v_existente.request_hash"));
 });
+
+test('legacy note cancellation hashes remain accepted on retries after migration',()=>{
+  const cancel=sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_anular_nota_venta'));
+  assert.ok(cancel.includes("v_hash_legacy:=md5(jsonb_build_object("));
+  assert.ok(cancel.includes("'motivo',v_motivo_devolucion,'lineas',v_lineas,'pagos',p_pagos"));
+  assert.ok(cancel.includes("v_existente.request_hash IS DISTINCT FROM v_hash_legacy"));
+});
