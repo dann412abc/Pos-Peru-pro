@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:pages-proxy": "node --test functions/api/proxy.test.js",
-    "test:cash-contract": "node --test ../supabase/migrations-preview/202611070046_cash_register_end_to_end_contract.test.mjs",
+    "test:cash-contract": "node --test ../supabase/migrations-preview/202611070042_cash_register_summary_auth.test.mjs ../supabase/migrations-preview/202611070046_cash_register_end_to_end_contract.test.mjs",
     "test:purchases-contract": "node --test ../supabase/migrations-preview/202611090005_purchase_receive_auth.test.mjs",
     "test:purchase-sales-flow": "node --test ../supabase/migrations-preview/202611090047_purchase_sales_lot_flow_contract.test.mjs",
     "test:edge-smoke": "vitest run functions/api/edge/edge.test.js",
