@@ -62,6 +62,9 @@ jobs:
       - name: Validate returns staging harness safety
         working-directory: frontend
         run: node --test ../supabase/tests/returns-staging-harness.test.mjs ../supabase/tests/returns-transaction-staging.integration.test.mjs
+      - name: Validate end-to-end purchase, sale, cash and return contract
+        working-directory: frontend
+        run: node --test ../supabase/tests/pos-end-to-end-staging.contract.test.mjs
       - name: Validate returns to cash UI integration
         working-directory: frontend
         run: node --test functions/api/edge/returns-cash-ui-integration-contract.test.mjs
@@ -86,4 +89,3 @@ jobs:
       - name: Type-check and build frontend
         working-directory: frontend
         run: npm run build
-
