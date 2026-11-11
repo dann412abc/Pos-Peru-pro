@@ -1,6 +1,8 @@
 -- PREVIEW ONLY — motor transaccional base de devoluciones.
--- Instalar en staging DESPUÉS de 202611090002_inventory_lots_returns_compat.sql
--- y ANTES de habilitar 202611090003_returns_register_fefo_auth.sql.
+-- Orden requerido: aplicar 202611090002_inventory_lots_returns_compat.sql,
+-- después 202611090003_returns_register_fefo_auth.sql y finalmente esta migración.
+-- Así, la anulación de notas de venta ya queda conectada al wrapper FEFO antes de
+-- convertir este escritor en una función interna sin EXECUTE para authenticated.
 -- No aplicar en producción sin validación funcional y respaldo.
 BEGIN;
 
