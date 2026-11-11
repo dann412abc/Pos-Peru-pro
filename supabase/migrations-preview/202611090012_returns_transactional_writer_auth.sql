@@ -23,7 +23,7 @@ BEGIN
     ('comprobante','cliente_id'),('comprobante','tipo'),('comprobante','estado'),
     ('comprobante_linea','id'),('comprobante_linea','comprobante_id'),
     ('comprobante_linea','producto_id'),('comprobante_linea','variante_id'),
-    ('comprobante_linea','cantidad'),('comprobante_linea','subtotal'),
+    ('comprobante_linea','cantidad'),('comprobante_linea','subtotal'),('comprobante_linea','descuento'),
     ('comprobante_pago','comprobante_id'),('comprobante_pago','metodo_pago'),('comprobante_pago','monto'),
     ('caja','id'),('caja','sucursal_id'),('caja','usuario_id'),('caja','estado'),('caja','saldo_inicial'),
     ('caja_movimiento','caja_id'),('caja_movimiento','usuario_id'),('caja_movimiento','tipo'),
@@ -208,7 +208,7 @@ BEGIN
     v_linea_id:=(v_item->>'comprobanteLineaId')::integer;
     v_cantidad:=(v_item->>'cantidad')::numeric;
     IF v_linea_id<=0 OR v_cantidad<=0 THEN RAISE EXCEPTION 'Cantidad inválida' USING ERRCODE='22023'; END IF;
-    SELECT cl.id,cl.producto_id,cl.variante_id,cl.cantidad,cl.subtotal,p.nombre
+    SELECT cl.id,cl.producto_id,cl.variante_id,cl.cantidad,cl.subtotal,cl.descuento,p.nombre
       INTO v_original
     FROM public.comprobante_linea cl
     JOIN public.producto p ON p.id=cl.producto_id AND p.empresa_id=v_empresa
@@ -216,7 +216,7 @@ BEGIN
     FOR UPDATE OF cl;
     IF NOT FOUND THEN RAISE EXCEPTION 'La línea no pertenece al comprobante' USING ERRCODE='22023'; END IF;
     SELECT greatest(0,v_original.cantidad-coalesce(sum(dl.cantidad) FILTER (WHERE d.id IS NOT NULL),0)),
-           greatest(0,v_original.subtotal-coalesce(sum(dl.monto) FILTER (WHERE d.id IS NOT NULL),0))
+           greatest(0,v_original.subtotal-v_original.descuento-coalesce(sum(dl.monto) FILTER (WHERE d.id IS NOT NULL),0))
       INTO v_disponible,v_importe_disponible
     FROM public.devolucion_venta_linea dl
     JOIN public.devolucion_venta d ON d.id=dl.devolucion_id
@@ -225,7 +225,7 @@ BEGIN
       RAISE EXCEPTION 'La cantidad solicitada supera la disponible de la línea %',v_linea_id USING ERRCODE='22023';
     END IF;
     v_importe:=CASE WHEN abs(v_cantidad-v_disponible)<0.0001 THEN v_importe_disponible
-      ELSE least(v_importe_disponible,round(v_original.subtotal*v_cantidad/v_original.cantidad,2)) END;
+      ELSE least(v_importe_disponible,round((v_original.subtotal-v_original.descuento)*v_cantidad/v_original.cantidad,2)) END;
     v_total:=v_total+v_importe;
   END LOOP;
   v_total:=round(v_total,2);
@@ -283,10 +283,10 @@ BEGIN
     v_reingresar:=coalesce((v_item->>'reingresarStock')::boolean,true);
     SELECT cl.producto_id,cl.variante_id INTO v_original
     FROM public.comprobante_linea cl WHERE cl.id=v_linea_id AND cl.comprobante_id=p_comprobante_id;
-    SELECT round(least(greatest(0,cl.subtotal-coalesce(sum(dl.monto) FILTER (WHERE d.id IS NOT NULL),0)),
+    SELECT round(least(greatest(0,cl.subtotal-cl.descuento-coalesce(sum(dl.monto) FILTER (WHERE d.id IS NOT NULL),0)),
       CASE WHEN abs(v_cantidad-(cl.cantidad-coalesce(sum(dl.cantidad) FILTER (WHERE d.id IS NOT NULL),0)))<0.0001
-        THEN cl.subtotal-coalesce(sum(dl.monto) FILTER (WHERE d.id IS NOT NULL),0)
-        ELSE round(cl.subtotal*v_cantidad/cl.cantidad,2) END),2)
+        THEN cl.subtotal-cl.descuento-coalesce(sum(dl.monto) FILTER (WHERE d.id IS NOT NULL),0)
+        ELSE round((cl.subtotal-cl.descuento)*v_cantidad/cl.cantidad,2) END),2)
     INTO v_importe
     FROM public.comprobante_linea cl
     LEFT JOIN public.devolucion_venta_linea dl ON dl.comprobante_linea_id=cl.id
@@ -354,8 +354,7 @@ BEGIN
 END;
 $fn$;
 
-REVOKE ALL ON FUNCTION public.pos_registrar_devolucion(integer,text,jsonb,jsonb,text) FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.pos_registrar_devolucion(integer,text,jsonb,jsonb,text) TO authenticated;
+REVOKE ALL ON FUNCTION public.pos_registrar_devolucion(integer,text,jsonb,jsonb,text) FROM PUBLIC,anon,authenticated;
 COMMENT ON FUNCTION public.pos_registrar_devolucion(integer,text,jsonb,jsonb,text) IS
 'Motor transaccional de devoluciones: idempotencia, saldo de crédito, stock base/variante y reembolsos de caja. El wrapper FEFO completa la trazabilidad de lotes en la misma transacción.';
 
