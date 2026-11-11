@@ -224,4 +224,171 @@ GRANT EXECUTE ON FUNCTION public.pos_devolucion_registrar_auth(integer,jsonb) TO
 COMMENT ON FUNCTION public.pos_devolucion_registrar_auth(integer,jsonb) IS
 'Registra devolución con la RPC transaccional existente y repone trazabilidad FEFO en la misma transacción. Requiere migración preview de compatibilidad de lotes y staging validado.';
 
+
+-- Mantiene la anulación de notas de venta conectada al mismo motor FEFO.
+-- La función interna de devolución admite NV únicamente para este flujo autorizado.
+CREATE OR REPLACE FUNCTION public.pos_anular_nota_venta(
+  p_comprobante_id integer,
+  p_motivo text,
+  p_pagos jsonb,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=pg_catalog,public,auth
+AS $cancel$
+DECLARE
+  v_usuario integer := public.mi_usuario_id();
+  v_empresa integer := public.mi_empresa_id();
+  v_comprobante public.comprobante%ROWTYPE;
+  v_lineas jsonb;
+  v_clave text := 'ANULNV:' || trim(coalesce(p_idempotency_key,''));
+  v_prefijo text := 'ANULACION NOTA DE VENTA:';
+  v_motivo text := trim(coalesce(p_motivo,''));
+  v_motivo_devolucion text;
+  v_hash text;
+  v_resultado jsonb;
+  v_existente public.devolucion_venta%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NULL OR v_usuario IS NULL OR v_empresa IS NULL
+     OR public.mi_rol() IS DISTINCT FROM 'ADMIN' THEN
+    RAISE EXCEPTION 'Solo un administrador autenticado puede anular notas de venta'
+      USING ERRCODE='42501';
+  END IF;
+
+  IF p_comprobante_id IS NULL OR length(v_motivo)<5 OR length(v_motivo)>450
+     OR length(trim(coalesce(p_idempotency_key,'')))<8
+     OR length(trim(coalesce(p_idempotency_key,'')))>80 THEN
+    RAISE EXCEPTION 'Comprobante, motivo o clave de anulación inválidos'
+      USING ERRCODE='22023';
+  END IF;
+  IF p_pagos IS NULL OR jsonb_typeof(p_pagos)<>'array' THEN
+    RAISE EXCEPTION 'Los reembolsos deben enviarse como una lista'
+      USING ERRCODE='22023';
+  END IF;
+
+  SELECT c.* INTO v_comprobante
+  FROM public.comprobante c
+  WHERE c.id=p_comprobante_id AND c.empresa_id=v_empresa
+    AND c.tipo='NV' AND public.mi_puede_ver_sucursal(c.sucursal_id)
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Nota de venta no encontrada o fuera de su empresa/sucursal'
+      USING ERRCODE='P0002';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('pos:anular_nv:'||v_empresa||':'||p_comprobante_id,0)
+  );
+
+  IF v_comprobante.estado NOT IN ('PAGADA','PENDIENTE','ANULADA') THEN
+    RAISE EXCEPTION 'La nota de venta no está en un estado anulable'
+      USING ERRCODE='22023';
+  END IF;
+
+  SELECT jsonb_agg(jsonb_build_object(
+    'comprobanteLineaId',cl.id,
+    'cantidad',cl.cantidad,
+    'reingresarStock',true
+  ) ORDER BY cl.id)
+  INTO v_lineas
+  FROM public.comprobante_linea cl
+  WHERE cl.comprobante_id=p_comprobante_id;
+  IF v_lineas IS NULL OR jsonb_array_length(v_lineas)=0 THEN
+    RAISE EXCEPTION 'La nota de venta no tiene líneas para revertir'
+      USING ERRCODE='22023';
+  END IF;
+
+  v_motivo_devolucion:=v_prefijo||' '||v_motivo;
+
+  -- La huella usa exactamente la misma canonicalización que el escritor interno.
+  -- Así, un reintento después de migrar no se confunde con una operación distinta.
+  SELECT md5(jsonb_build_object(
+    'comprobanteId',p_comprobante_id,
+    'motivo',v_motivo_devolucion,
+    'lineas',(SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'comprobanteLineaId',(x->>'comprobanteLineaId')::integer,
+      'cantidad',round((x->>'cantidad')::numeric,3),
+      'reingresarStock',coalesce((x->>'reingresarStock')::boolean,true)
+    ) ORDER BY (x->>'comprobanteLineaId')::integer),'[]'::jsonb)
+      FROM jsonb_array_elements(v_lineas) x),
+    'pagos',(SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'metodoPago',x->>'metodoPago',
+      'monto',round((x->>'monto')::numeric,2),
+      'referencia',nullif(btrim(coalesce(x->>'referencia','')),'')
+    ) ORDER BY x->>'metodoPago'),'[]'::jsonb)
+      FROM jsonb_array_elements(p_pagos) x)
+  )::text) INTO v_hash;
+
+  SELECT d.* INTO v_existente
+  FROM public.devolucion_venta d
+  WHERE d.empresa_id=v_empresa AND d.usuario_id=v_usuario
+    AND d.idempotency_key=v_clave;
+
+  IF FOUND THEN
+    IF v_existente.comprobante_id<>p_comprobante_id
+       OR left(v_existente.motivo,length(v_prefijo))<>v_prefijo
+       OR v_existente.request_hash IS DISTINCT FROM v_hash THEN
+      RAISE EXCEPTION 'La clave de anulación ya fue utilizada con otros datos';
+    END IF;
+    IF v_comprobante.estado<>'ANULADA' THEN
+      UPDATE public.comprobante
+      SET estado='ANULADA',motivo_anulacion=v_motivo
+      WHERE id=p_comprobante_id AND empresa_id=v_empresa
+        AND tipo='NV' AND estado IN ('PAGADA','PENDIENTE');
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'No se pudo reconciliar el estado de la nota de venta';
+      END IF;
+    END IF;
+    RETURN jsonb_build_object(
+      'comprobanteId',p_comprobante_id,'estado','ANULADA',
+      'devolucionId',v_existente.id,'totalRevertido',v_existente.total_devolucion,
+      'creditoRevertido',v_existente.credito_revertido,
+      'montoReembolsado',v_existente.monto_reembolsado,'reintento',true
+    );
+  END IF;
+
+  IF v_comprobante.estado='ANULADA' THEN
+    RAISE EXCEPTION 'La nota ya está anulada y no existe una operación idempotente asociada';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.devolucion_venta d
+    WHERE d.comprobante_id=p_comprobante_id AND d.empresa_id=v_empresa
+      AND d.estado='REGISTRADA'
+  ) THEN
+    RAISE EXCEPTION 'No se puede anular: la nota de venta ya tiene devoluciones registradas';
+  END IF;
+
+  -- No llamar directamente al escritor interno: el wrapper también repone
+  -- los lotes originales FEFO en la misma transacción de anulación.
+  v_resultado:=public.pos_devolucion_registrar_auth(
+    p_comprobante_id,
+    jsonb_build_object(
+      'motivo',v_motivo_devolucion,
+      'idempotencyKey',v_clave,
+      'lineas',v_lineas,
+      'pagos',p_pagos
+    )
+  );
+
+  UPDATE public.comprobante
+  SET estado='ANULADA',motivo_anulacion=v_motivo
+  WHERE id=p_comprobante_id AND empresa_id=v_empresa
+    AND tipo='NV' AND estado IN ('PAGADA','PENDIENTE');
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No se pudo actualizar el estado de la nota de venta';
+  END IF;
+
+  RETURN jsonb_build_object(
+    'comprobanteId',p_comprobante_id,'estado','ANULADA',
+    'devolucionId',(v_resultado->>'id')::bigint,
+    'totalRevertido',(v_resultado->>'totalDevolucion')::numeric,
+    'creditoRevertido',(v_resultado->>'creditoRevertido')::numeric,
+    'montoReembolsado',(v_resultado->>'montoReembolsado')::numeric,
+    'reintento',coalesce((v_resultado->>'reintento')::boolean,false)
+  );
+END;
+$cancel$;
+
 COMMIT;
