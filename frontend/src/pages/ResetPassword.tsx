@@ -19,7 +19,11 @@ export default function ResetPassword() {
       const query = new URLSearchParams(window.location.search);
       const token = hash.get('access_token') || query.get('access_token');
       const type = hash.get('type') || query.get('type');
-      const tokenHash = query.get('token_hash') || hash.get('token_hash');
+      // Supabase email links can arrive as a verified access-token fragment,
+      // a token_hash callback, or the raw "token" query parameter from /auth/v1/verify.
+      const tokenHash = query.get('token_hash') || hash.get('token_hash')
+        || (query.get('type') === 'recovery' ? query.get('token') : null)
+        || (hash.get('type') === 'recovery' ? hash.get('token') : null);
       const error = hash.get('error_description') || query.get('error_description');
       if (error) toast.error(error.replace(/\+/g, ' '));
       if (token && type === 'recovery') {
