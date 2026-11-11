@@ -168,13 +168,16 @@ BEGIN
       'referencia',nullif(btrim(coalesce(x->>'referencia','')),'')
     ) ORDER BY x->>'metodoPago'),'[]'::jsonb) FROM jsonb_array_elements(coalesce(p_pagos,'[]'::jsonb)) x)
   )::text) INTO v_hash;
+  -- Acepta también la huella del escritor anterior para recuperar intentos pendientes tras la migración.
+  v_hash_legacy:=md5(jsonb_build_object('motivo',v_motivo,'lineas',p_lineas,'pagos',p_pagos)::text);
 
   PERFORM pg_advisory_xact_lock(hashtextextended(
     'pos-return:'||v_empresa||':'||v_usuario||':'||v_key,0));
   SELECT id,request_hash INTO v_existente FROM public.devolucion_venta
   WHERE empresa_id=v_empresa AND usuario_id=v_usuario AND idempotency_key=v_key;
   IF FOUND THEN
-    IF v_existente.request_hash<>v_hash THEN
+    IF v_existente.request_hash IS DISTINCT FROM v_hash
+       AND v_existente.request_hash IS DISTINCT FROM v_hash_legacy THEN
       RAISE EXCEPTION 'La clave ya fue utilizada con otros datos; revise el historial' USING ERRCODE='23505';
     END IF;
     RETURN jsonb_build_object('id',v_existente.id,'comprobanteId',p_comprobante_id,
