@@ -61,6 +61,5 @@ test('returns writer fails fast when identity helpers or required schema columns
 });
 
 test('transactional writer preserves notes for the dedicated cancellation flow',()=>{
- assert.match(sql,/v_venta\\.tipo NOT IN \\('\\''01'\\'',\\s*'\\''03'\\'',\\s*'\\''NV'\\''\\)/);
+ assert.ok(sql.includes("v_venta.tipo NOT IN ('01','03','NV')"));
 });
-
