@@ -2,6 +2,12 @@
 -- Requiere las migraciones POS existentes, incluida producto_stock y producto_variante.
 -- Función de solo lectura; la empresa y el usuario se obtienen exclusivamente de auth.uid().
 BEGIN;
+
+-- Compatibilidad con el esquema POS AYNI PERÚ comprobado en staging.
+ALTER TABLE public.cliente ADD COLUMN IF NOT EXISTS activo boolean NOT NULL DEFAULT TRUE;
+ALTER TABLE public.producto ADD COLUMN IF NOT EXISTS codigo_barras varchar(80);
+ALTER TABLE public.producto ADD COLUMN IF NOT EXISTS tiene_variantes boolean NOT NULL DEFAULT FALSE;
+ALTER TABLE public.producto_variante ADD COLUMN IF NOT EXISTS codigo_barras varchar(80);
 CREATE OR REPLACE FUNCTION public.pos_catalogo_base_auth(p_sucursal_id integer DEFAULT NULL)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -22,7 +28,7 @@ BEGIN
 
   SELECT u.id, u.empresa_id INTO v_usuario_id, v_empresa_id
   FROM public.usuario u
-  WHERE u.supabase_auth_user_id = v_auth_id AND u.activo = TRUE;
+  WHERE u.auth_user_id = v_auth_id AND u.activo = TRUE;
   IF v_usuario_id IS NULL THEN
     RAISE EXCEPTION 'Identidad POS no vinculada o inactiva' USING ERRCODE = 'P0002';
   END IF;
