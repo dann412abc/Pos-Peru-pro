@@ -42,9 +42,9 @@ test('nota de venta cancellation uses the authenticated FEFO wrapper, not the in
   const cancel=sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_anular_nota_venta'));
   assert.match(cancel,/c\.tipo='NV'/);
   assert.match(cancel,/public\.pos_devolucion_registrar_auth\(/);
-  assert.match(cancel,/'idempotencyKey',v_clave/);
+  assert.ok(cancel.includes("'idempotencyKey',v_clave"));
   assert.doesNotMatch(cancel,/public\.pos_registrar_devolucion\(/);
-  assert.match(cancel,/estado='ANULADA'/);
+  assert.ok(cancel.includes("estado='ANULADA'"));
 });
 
 test('nota cancellation retry hash uses the same canonical payload as the transaction writer',()=>{
@@ -52,7 +52,7 @@ test('nota cancellation retry hash uses the same canonical payload as the transa
   for(const key of ["'comprobanteId',p_comprobante_id","'motivo',v_motivo_devolucion",
     "'comprobanteLineaId'","'reingresarStock'","'metodoPago'","'referencia'"])
     assert.ok(cancel.includes(key),key);
-  assert.match(cancel,/request_hash IS DISTINCT FROM v_hash/);
+  assert.ok(cancel.includes("request_hash IS DISTINCT FROM v_hash"));
   assert.match(cancel,/v_existente\\.request_hash/);
 });
 
