@@ -1,7 +1,9 @@
 -- PREVIEW ONLY — Registro de devolución autenticado con restitución FEFO atómica.
 -- Requiere 202611090002_inventory_lots_returns_compat.sql y la RPC legacy transaccional.
 -- Reutiliza el cálculo probado de importes, caja, crédito e inventario; añade trazabilidad de lotes
--- dentro de la misma transacción PostgREST. No aplicar en producción sin staging.
+-- dentro de la misma transacción PostgREST. Aplicar después de 090002 y antes de 090012,
+-- de modo que la anulación NV ya use este wrapper cuando el escritor base quede interno.
+-- No aplicar en producción sin staging.
 BEGIN;
 
 CREATE OR REPLACE FUNCTION public.pos_devolucion_registrar_auth(
