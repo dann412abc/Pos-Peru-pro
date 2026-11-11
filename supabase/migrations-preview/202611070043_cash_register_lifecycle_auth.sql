@@ -11,7 +11,7 @@ BEGIN
  IF p_sucursal_id IS NULL OR p_sucursal_id<=0 OR p_saldo_inicial IS NULL OR p_saldo_inicial<0 OR p_saldo_inicial<>round(p_saldo_inicial,2) THEN
   RAISE EXCEPTION 'CASH_OPEN_INPUT_INVALID' USING ERRCODE='22023';
  END IF;
- SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE supabase_auth_user_id=v_auth AND activo=true;
+ SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE auth_user_id=v_auth AND activo=true;
  IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.sucursal s JOIN public.usuario_sucursal us ON us.sucursal_id=s.id WHERE s.id=p_sucursal_id AND s.empresa_id=v_empresa AND us.usuario_id=v_usuario) THEN
   RAISE EXCEPTION 'Sucursal no autorizada' USING ERRCODE='42501';
@@ -36,7 +36,7 @@ BEGIN
     OR p_monto IS NULL OR p_monto<=0 OR p_monto<>round(p_monto,2) OR length(trim(COALESCE(p_motivo,'')))<5 OR length(p_motivo)>200 THEN
   RAISE EXCEPTION 'CASH_MOVEMENT_INPUT_INVALID' USING ERRCODE='22023';
  END IF;
- SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE supabase_auth_user_id=v_auth AND activo=true;
+ SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE auth_user_id=v_auth AND activo=true;
  IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
  SELECT c.estado INTO v_estado FROM public.caja c JOIN public.sucursal s ON s.id=c.sucursal_id
  JOIN public.usuario_sucursal us ON us.sucursal_id=c.sucursal_id AND us.usuario_id=v_usuario
@@ -82,7 +82,7 @@ BEGIN
  IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
  IF p_caja_id IS NULL OR p_caja_id<=0 OR p_efectivo_contado IS NULL OR p_efectivo_contado<0 OR p_efectivo_contado<>round(p_efectivo_contado,2)
     OR jsonb_typeof(p_arqueo)<>'array' THEN RAISE EXCEPTION 'CASH_CLOSE_INPUT_INVALID' USING ERRCODE='22023'; END IF;
- SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE supabase_auth_user_id=v_auth AND activo=true;
+ SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE auth_user_id=v_auth AND activo=true;
  IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
  SELECT c.* INTO v_caja FROM public.caja c JOIN public.sucursal s ON s.id=c.sucursal_id
  JOIN public.usuario_sucursal us ON us.sucursal_id=c.sucursal_id AND us.usuario_id=v_usuario
