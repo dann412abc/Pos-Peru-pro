@@ -3,11 +3,11 @@
 BEGIN;
 CREATE OR REPLACE FUNCTION public.pos_catalogo_mutar_auth(p_action text, p_payload jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, auth AS $fn$
-DECLARE v_auth uuid := auth.uid(); v_user integer; v_empresa integer; v_id integer; v_sucursal integer; v_nombre text; v_codigo text; v_result jsonb;
+DECLARE v_auth uuid := auth.uid(); v_user integer; v_empresa integer; v_id integer; v_sucursal integer; v_nombre text; v_codigo text; v_result jsonb; v_rol text;
 BEGIN
   IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
-  SELECT id, empresa_id INTO v_user, v_empresa FROM public.usuario WHERE supabase_auth_user_id=v_auth AND activo=TRUE;
-  IF v_user IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
+  SELECT id, empresa_id, upper(rol) INTO v_user, v_empresa, v_rol FROM public.usuario WHERE auth_user_id=v_auth AND activo=TRUE;
+  IF v_user IS NULL OR v_rol <> 'ADMIN' THEN RAISE EXCEPTION 'Usuario POS no vinculado, inactivo o sin rol administrador' USING ERRCODE='42501'; END IF;
   IF jsonb_typeof(p_payload) <> 'object' THEN RAISE EXCEPTION 'Payload inválido' USING ERRCODE='22023'; END IF;
 
   IF p_action LIKE 'product_%' THEN
@@ -20,10 +20,17 @@ BEGIN
       IF NULLIF(p_payload->>'categoria_id','') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.categoria WHERE id=(p_payload->>'categoria_id')::integer AND empresa_id=v_empresa AND activo=TRUE) THEN RAISE EXCEPTION 'Categoría no pertenece a la empresa' USING ERRCODE='42501'; END IF;
     END IF;
     IF p_action='product_create' THEN
+      v_sucursal := NULLIF(p_payload->>'sucursal_id','')::integer;
+      IF v_sucursal IS NULL OR NOT EXISTS (
+        SELECT 1 FROM public.usuario_sucursal us
+        JOIN public.sucursal s ON s.id=us.sucursal_id AND s.empresa_id=v_empresa
+        WHERE us.usuario_id=v_user AND us.sucursal_id=v_sucursal
+      ) THEN RAISE EXCEPTION 'Sucursal no autorizada para crear el producto' USING ERRCODE='42501'; END IF;
       INSERT INTO public.producto(empresa_id,codigo,nombre,categoria_id,codigo_barras,tiene_variantes,unidad,precio,precio_mayoreo,stock_minimo,tipo_igv,activo)
       VALUES(v_empresa,v_codigo,v_nombre,NULLIF(p_payload->>'categoria_id','')::integer,NULLIF(btrim(p_payload->>'codigo_barras'),''),COALESCE((p_payload->>'tiene_variantes')::boolean,false),COALESCE(NULLIF(p_payload->>'unidad',''),'NIU'),(p_payload->>'precio')::numeric,NULLIF(p_payload->>'precio_mayoreo','')::numeric,COALESCE((p_payload->>'stock_minimo')::numeric,0),COALESCE((p_payload->>'tipo_igv')::integer,10),true) RETURNING id INTO v_id;
-      SELECT id INTO v_sucursal FROM public.usuario_sucursal WHERE usuario_id=v_user ORDER BY sucursal_id LIMIT 1;
-      IF v_sucursal IS NULL THEN RAISE EXCEPTION 'Usuario sin sucursal asignada' USING ERRCODE='42501'; END IF;
+      INSERT INTO public.producto_stock(empresa_id,sucursal_id,producto_id,stock,stock_minimo)
+      VALUES(v_empresa,v_sucursal,v_id,0,COALESCE((p_payload->>'stock_minimo')::numeric,0))
+      ON CONFLICT (producto_id,sucursal_id) DO NOTHING;
       SELECT to_jsonb(p) INTO v_result FROM public.producto p WHERE p.id=v_id;
       RETURN v_result;
     ELSIF p_action='product_update' THEN
