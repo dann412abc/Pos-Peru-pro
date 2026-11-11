@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import VentaRapida from './pages/VentaRapida';
 import Productos from './pages/Productos';
@@ -20,12 +21,11 @@ import Mermas from './pages/Mermas';
 import ConteoFisico from './pages/ConteoFisico';
 import AlertasOperativas from './pages/AlertasOperativas';
 
-// Definición de rutas de Mi Carrito POS.
-// Rutas protegidas dentro de <Layout> (verifica autenticación).
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Navigate to="/venta-rapida" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />

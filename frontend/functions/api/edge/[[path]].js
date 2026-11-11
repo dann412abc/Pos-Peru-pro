@@ -105,11 +105,30 @@ export async function onRequest({ request, env, params }) {
     try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
     if (typeof body.email !== 'string' || !body.email.includes('@')) return json({ error: 'EMAIL_REQUIRED', message: 'Ingresa un correo válido.' }, 400);
     try {
-      const response = await fetch(new URL('/auth/v1/recover', supabase), {
+      const recoveryUrl = new URL('/auth/v1/recover', supabase);
+      if (typeof body.redirect_to === 'string' && body.redirect_to.startsWith('https://')) {
+        recoveryUrl.searchParams.set('redirect_to', body.redirect_to);
+      }
+      const response = await fetch(recoveryUrl, {
         method: 'POST', headers: { apikey: env.SUPABASE_ANON_KEY, 'content-type': 'application/json' },
-        body: JSON.stringify({ email: body.email.trim().toLowerCase(), redirect_to: body.redirect_to }),
+        body: JSON.stringify({ email: body.email.trim().toLowerCase() }),
       });
-      if (!response.ok) return json({ error: 'RECOVERY_REQUEST_FAILED', message: 'No se pudo solicitar la recuperación.' }, response.status === 429 ? 429 : 502);
+      if (!response.ok) {
+        const providerError = await response.json().catch(() => ({}));
+        const providerCode = String(providerError.code || providerError.error_code || providerError.error || 'RECOVERY_REQUEST_FAILED').slice(0, 80);
+        const providerMessage = String(providerError.msg || providerError.message || providerError.error_description || '').slice(0, 240);
+        const status = response.status === 429 ? 429 : response.status === 400 ? 400 : 502;
+        return json({
+          error: 'RECOVERY_REQUEST_FAILED',
+          code: providerCode,
+          message: status === 429
+            ? 'Se solicitaron demasiados enlaces. Espera unos minutos e inténtalo otra vez.'
+            : status === 400
+              ? 'Supabase rechazó la solicitud. Revisa el correo y la URL de retorno permitida.'
+              : 'Supabase Auth no pudo enviar el correo. Revisa la configuración SMTP y los registros de Auth.',
+          providerMessage: providerMessage || undefined,
+        }, status);
+      }
       return json({ ok: true, message: 'Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña.' });
     } catch { return json({ error: 'AUTH_PROVIDER_UNAVAILABLE' }, 502); }
   }
@@ -134,7 +153,7 @@ export async function onRequest({ request, env, params }) {
     if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
     try {
       // La función SQL usa auth.uid(); nunca se acepta un usuario_id del navegador.
-      const response = await fetch(new URL('/rest/v1/rpc/pos_mi_perfil_auth', supabase), {
+      const response = await fetch(new URL('/rest/v1/rpc/mi_perfil_pos', supabase), {
         method: 'POST',
         headers: {
           apikey: env.SUPABASE_ANON_KEY,

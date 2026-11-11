@@ -6,7 +6,7 @@
   "description": "Mi Carrito POS - Sistema de facturación electrónica POS para Perú",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && node scripts/build.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:pages-proxy": "node --test tests/api/proxy.test.js",
@@ -14,7 +14,11 @@
     "test:purchases-contract": "node --test ../supabase/migrations-preview/202611090005_purchase_receive_auth.test.mjs",
     "test:purchase-sales-flow": "node --test ../supabase/migrations-preview/202611090047_purchase_sales_lot_flow_contract.test.mjs",
     "test:edge-smoke": "vitest run tests/api/edge/edge.test.js",
-    "test:returns-contract": "cd .. && node --test supabase/migrations-preview/202611070043_cash_register_lifecycle_auth.test.mjs supabase/migrations-preview/202611070045_cash_refund_reconciliation_auth.test.mjs supabase/migrations-preview/202611090003_returns_register_fefo_auth.test.mjs supabase/migrations-preview/202611090012_returns_transactional_writer_auth.test.mjs frontend/tests/api/edge/returns-register-contract.test.mjs frontend/tests/api/edge/returns-supabase-gate.test.mjs"
+    "test:returns-contract": "cd .. && node --test supabase/migrations-preview/202611070043_cash_register_lifecycle_auth.test.mjs supabase/migrations-preview/202611070045_cash_refund_reconciliation_auth.test.mjs supabase/migrations-preview/202611090003_returns_register_fefo_auth.test.mjs supabase/migrations-preview/202611090012_returns_transactional_writer_auth.test.mjs frontend/tests/api/edge/returns-register-contract.test.mjs frontend/tests/api/edge/returns-supabase-gate.test.mjs",
+    "test:preview-auth-build": "node --test scripts/build.test.mjs",
+    "test:recovery-redirect": "node --test scripts/recovery-redirect.test.mjs tests/api/edge/auth-recovery-redirect-contract.test.mjs",
+    "test:password-update": "node --test scripts/password-update-diagnostics.test.mjs",
+    "test:recovery-token": "node --test scripts/recovery-token-query.test.mjs"
   },
   "dependencies": {
     "axios": "^1.6.8",
