@@ -29,6 +29,19 @@ test('FEFO wrapper restores original sale lots after transactional stock and cas
  assert.match(fefo,/devolucion_venta_lote/);
 });
 
+test('partial return calculation refunds only the net line amount after line discounts',()=>{
+ assert.match(sql, /\('comprobante_linea','descuento'\)/);
+ assert.match(sql, /cl\.subtotal-cl\.descuento/);
+ assert.match(sql, /\(v_original\.subtotal-v_original\.descuento\)\*v_cantidad/);
+ assert.match(sql, /\(cl\.subtotal-cl\.descuento\)\*v_cantidad/);
+});
+
+test('base return writer is internal-only so authenticated clients must use the FEFO wrapper',()=>{
+ assert.match(sql,/REVOKE ALL ON FUNCTION public\.pos_registrar_devolucion\(integer,text,jsonb,jsonb,text\) FROM PUBLIC,anon,authenticated/);
+ assert.doesNotMatch(sql,/GRANT EXECUTE ON FUNCTION public\.pos_registrar_devolucion/);
+ assert.match(fefo,/GRANT EXECUTE ON FUNCTION public\.pos_devolucion_registrar_auth\(integer,jsonb\) TO authenticated/);
+});
+
 test('partial return value calculation only aggregates already-registered returns',()=>{
  assert.match(sql,/sum\(dl\.monto\) FILTER \(WHERE d\.id IS NOT NULL\)/);
  assert.match(sql,/sum\(dl\.cantidad\) FILTER \(WHERE d\.id IS NOT NULL\)/);
