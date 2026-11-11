@@ -37,3 +37,22 @@ test('Cloudflare endpoint calls the authenticated wrapper payload shape',()=>{
   assert.match(edge,/p_payload:\s*\{/);
   assert.doesNotMatch(edge,/new URL\('\/rest\/v1\/rpc\/pos_registrar_devolucion'/);
 });
+
+test('nota de venta cancellation uses the authenticated FEFO wrapper, not the internal writer',()=>{
+  const cancel=sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_anular_nota_venta'));
+  assert.match(cancel,/c\.tipo='NV'/);
+  assert.match(cancel,/public\.pos_devolucion_registrar_auth\(/);
+  assert.match(cancel,/'idempotencyKey',v_clave/);
+  assert.doesNotMatch(cancel,/public\.pos_registrar_devolucion\(/);
+  assert.match(cancel,/estado='ANULADA'/);
+});
+
+test('nota cancellation retry hash uses the same canonical payload as the transaction writer',()=>{
+  const cancel=sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_anular_nota_venta'));
+  for(const key of ["'comprobanteId',p_comprobante_id","'motivo',v_motivo_devolucion",
+    "'comprobanteLineaId'","'reingresarStock'","'metodoPago'","'referencia'"])
+    assert.ok(cancel.includes(key),key);
+  assert.match(cancel,/request_hash IS DISTINCT FROM v_hash/);
+  assert.match(cancel,/v_existente\\.request_hash/);
+});
+
