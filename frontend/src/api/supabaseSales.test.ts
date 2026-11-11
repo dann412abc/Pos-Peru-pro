@@ -17,7 +17,7 @@ const payload = {
 };
 
 describe('adaptador de ventas Supabase', () => {
-  beforeEach(() => { post.mockReset(); localStorage.clear(); });
+  beforeEach(() => {\n    post.mockReset();\n    const values = new Map<string, string>();\n    vi.stubGlobal('localStorage', {\n      getItem: (key: string) => values.get(key) ?? null,\n      setItem: (key: string, value: string) => { values.set(key, String(value)); },\n      removeItem: (key: string) => { values.delete(key); },\n      clear: () => values.clear(),\n    });\n  });
 
   it('llama exclusivamente a la RPC autenticada con p_payload', async () => {
     post.mockResolvedValue({ data: { ok: true, decision: 'CREATED', comprobanteId: 90, serie: 'B001', correlativo: 5, total: 10 } });
