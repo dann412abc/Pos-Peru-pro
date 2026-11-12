@@ -102,3 +102,12 @@ test('allows repeated product/variant lines when each line has a distinct lot id
   assert.ok(sql.includes('PURCHASE_DUPLICATE_LINE'));
   assert.ok(!sql.includes("line_key:=product_id::text||':'||COALESCE(variant_id::text,'base');"));
 });
+
+test('purchase receipt rejects already expired lots before any stock write', () => {
+  assert.ok(sql.includes("expiry_date:=NULLIF(line->>'fechaVencimiento','')::date;"));
+  assert.ok(sql.includes("IF expiry_date IS NOT NULL AND expiry_date<(now() AT TIME ZONE 'America/Lima')::date THEN"));
+  assert.ok(sql.includes('PURCHASE_LOT_ALREADY_EXPIRED'));
+  const expiryGuard = sql.indexOf('PURCHASE_LOT_ALREADY_EXPIRED');
+  const purchaseInsert = sql.indexOf('INSERT INTO public.compra(');
+  assert.ok(expiryGuard >= 0 && expiryGuard < purchaseInsert);
+});

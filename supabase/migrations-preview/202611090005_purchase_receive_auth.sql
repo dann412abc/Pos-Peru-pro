@@ -119,6 +119,10 @@ BEGIN
   product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::bigint;
   packs:=(line->>'cantidad')::numeric; units_per_pack:=COALESCE(NULLIF(line->>'unidadesPorEmpaque','')::numeric,1);
   pack_cost:=COALESCE(NULLIF(line->>'costoEmpaque','')::numeric,(line->>'costoUnitario')::numeric*units_per_pack);
+  expiry_date:=NULLIF(line->>'fechaVencimiento','')::date;
+  IF expiry_date IS NOT NULL AND expiry_date<(now() AT TIME ZONE 'America/Lima')::date THEN
+   RAISE EXCEPTION 'PURCHASE_LOT_ALREADY_EXPIRED: no se puede recibir un lote vencido' USING ERRCODE='22023';
+  END IF;
   IF packs<=0 OR packs>999999 OR units_per_pack<=0 OR units_per_pack>999999 OR pack_cost<=0 OR pack_cost>99999999
   OR (line->>'tipoIgv') IS NULL OR (line->>'tipoIgv')::integer NOT IN (10,20,30)
   OR length(COALESCE(line->>'codigoLote',''))>80 THEN
