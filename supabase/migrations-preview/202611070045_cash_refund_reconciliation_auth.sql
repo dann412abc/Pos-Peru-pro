@@ -13,7 +13,7 @@ DECLARE
  v_efectivo_esperado numeric(12,2);
 BEGIN
  IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
- SELECT u.id,u.empresa_id INTO v_usuario,v_empresa FROM public.usuario u WHERE u.auth_user_id=v_auth AND u.activo=true;
+ SELECT u.id,u.empresa_id INTO v_usuario,v_empresa FROM public.usuario u WHERE u.supabase_auth_user_id=v_auth AND u.activo=true;
  IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
  SELECT c.sucursal_id,c.saldo_inicial INTO v_sucursal,v_saldo
  FROM public.caja c JOIN public.sucursal s ON s.id=c.sucursal_id AND s.empresa_id=v_empresa
@@ -75,7 +75,7 @@ AS $fn$
 DECLARE v_auth uuid:=auth.uid(); v_usuario integer; v_empresa integer; v_result jsonb;
 BEGIN
  IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
- SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE auth_user_id=v_auth AND activo=true;
+ SELECT id,empresa_id INTO v_usuario,v_empresa FROM public.usuario WHERE supabase_auth_user_id=v_auth AND activo=true;
  IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario POS no vinculado o inactivo' USING ERRCODE='42501'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.caja c JOIN public.sucursal s ON s.id=c.sucursal_id AND s.empresa_id=v_empresa
  JOIN public.usuario_sucursal us ON us.sucursal_id=c.sucursal_id AND us.usuario_id=v_usuario
