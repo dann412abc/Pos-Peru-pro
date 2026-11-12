@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.inventario_merma (
   empresa_id integer NOT NULL,
   sucursal_id integer NOT NULL,
   producto_id integer NOT NULL,
-  variante_id bigint,
+  variante_id integer,
   usuario_id integer NOT NULL,
   movimiento_id integer NOT NULL,
   idempotency_key varchar(100) NOT NULL,
@@ -54,7 +54,7 @@ DECLARE
   v_empresa integer := public.mi_empresa_id();
   v_sucursal integer;
   v_producto integer;
-  v_variante bigint;
+  v_variante integer;
   v_cantidad numeric(12,3);
   v_tipo text;
   v_obs text;
@@ -71,7 +71,7 @@ BEGIN
   IF jsonb_typeof(p_payload) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'INVENTORY_WASTE_INVALID_PAYLOAD'; END IF;
   v_sucursal := (p_payload->>'sucursalId')::integer;
   v_producto := (p_payload->>'productoId')::integer;
-  v_variante := NULLIF(p_payload->>'varianteId','')::bigint;
+  v_variante := NULLIF(p_payload->>'varianteId','')::integer;
   v_cantidad := (p_payload->>'cantidad')::numeric;
   v_tipo := upper(trim(coalesce(p_payload->>'motivoTipo','')));
   v_obs := trim(coalesce(p_payload->>'observacion',''));
@@ -183,5 +183,6 @@ $function$;
 REVOKE ALL ON FUNCTION public.pos_inventario_merma_registrar_auth(jsonb) FROM PUBLIC,anon;
 REVOKE ALL ON FUNCTION public.pos_inventario_mermas_listar_auth(integer) FROM PUBLIC,anon;\nREVOKE ALL ON FUNCTION public.pos_inventario_lotes_merma_auth(integer) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.pos_inventario_merma_registrar_auth(jsonb) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.pos_inventario_mermas_listar_auth(integer) TO authenticated;\nGRANT EXECUTE ON FUNCTION public.pos_inventario_lotes_merma_auth(integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.pos_inventario_mermas_listar_auth(integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.pos_inventario_lotes_merma_auth(integer) TO authenticated;
 COMMIT;
