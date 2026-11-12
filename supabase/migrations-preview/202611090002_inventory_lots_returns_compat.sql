@@ -43,7 +43,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante
 
 ALTER TABLE public.producto_variante_stock
   ADD COLUMN IF NOT EXISTS producto_id integer,
-  ADD COLUMN IF NOT EXISTS costo_promedio numeric(12,4) NOT NULL DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS costo_promedio numeric(12,4) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+
+-- Campos usados por el motor de devoluciones para sincronizar inventario y crédito.
+ALTER TABLE public.producto_stock
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.cuenta_cobrar
+  ADD COLUMN IF NOT EXISTS monto_revertido numeric(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.cliente
+  ADD COLUMN IF NOT EXISTS saldo_credito numeric(12,2) NOT NULL DEFAULT 0;
 
 -- El contrato actual de compras/ventas consulta producto_id directamente en el saldo de variante.
 UPDATE public.producto_variante_stock vs
