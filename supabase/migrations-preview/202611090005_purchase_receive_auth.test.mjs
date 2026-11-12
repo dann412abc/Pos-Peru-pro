@@ -34,6 +34,14 @@ test('idempotency uses a transaction lock and compares the full JSONB payload ha
   assert.match(sql, /'repetida',true/);
 });
 
+test('purchase receipt hash column and variant identifier match historical schema types', () => {
+  assert.match(sql, /column_name='payload_hash'/);
+  assert.match(sql, /c\.payload_hash/);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS payload_hash text/);
+  assert.match(sql, /variant_id integer/);
+  assert.doesNotMatch(sql, /variant_id bigint|::bigint/);
+});
+
 test('purchase lines convert packs, enforce catalog IGV and calculate weighted cost', () => {
   assert.match(sql, /round\(packs\*units_per_pack,3\)/);
   assert.match(sql, /round\(pack_cost\/units_per_pack,4\)/);
