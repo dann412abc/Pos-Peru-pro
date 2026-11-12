@@ -26,3 +26,10 @@ test('purchase receipt preserves bigint variant identifiers without narrowing ca
   assert.match(sql, /NULLIF\(v_line->>'varianteId',''\)::bigint/);
   assert.doesNotMatch(sql, /NULLIF\(v_line->>'varianteId',''\)::integer/);
 });
+
+test('purchase idempotency is serialized before replay lookup and binds the key to its payload',()=>{
+  assert.match(sql,/pg_advisory_xact_lock\(hashtextextended\('pos:compra:'/);
+  assert.ok(sql.indexOf('pg_advisory_xact_lock')<sql.indexOf('SELECT c.id,c.request_hash'));
+  assert.match(sql,/v_existing_hash IS DISTINCT FROM v_request_hash/);
+  assert.match(sql,/idempotency_key,request_hash\)/);
+});
