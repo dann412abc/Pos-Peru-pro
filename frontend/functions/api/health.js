@@ -11,6 +11,6 @@ export async function onRequest({ env }) {
     deployment: 'cloudflare-pages',
     supabaseConfigured: Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY),
     legacyApiConfigured: Boolean(env.API_ORIGIN),
-    version: '1.44.77',
+    version: '1.44.79',
   }), { status: 200, headers });
 }
