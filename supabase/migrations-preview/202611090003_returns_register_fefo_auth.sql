@@ -131,32 +131,39 @@ BEGIN
     -- Devuelve solo a lotes consumidos por esta línea. Los registros de otras
     -- líneas nunca reducen el saldo restituible de la línea actual.
     FOR v_lote IN
-      SELECT cls.lote_id,
-             GREATEST(0,cls.cantidad-COALESCE(previo.cantidad,0))::numeric(12,3) AS disponible_devolver
-      FROM public.comprobante_lote_salida cls
+      -- Agrupar salidas repetidas del mismo lote antes de calcular lo pendiente.
+      -- Evita contar dos veces la capacidad restituible si una venta generó
+      -- más de un registro de salida para la misma línea y lote.
+      SELECT asign.lote_id,
+             GREATEST(0,asign.cantidad-COALESCE(previo.cantidad,0))::numeric(12,3) AS disponible_devolver
+      FROM (
+        SELECT cls.lote_id,SUM(cls.cantidad)::numeric(12,3) AS cantidad
+        FROM public.comprobante_lote_salida cls
+        WHERE cls.empresa_id=v_empresa
+          AND cls.comprobante_id=p_comprobante_id
+          AND cls.producto_id=v_producto_id
+          AND cls.variante_id IS NOT DISTINCT FROM v_variante_id
+          AND cls.comprobante_linea_id=v_linea_id
+        GROUP BY cls.lote_id
+      ) asign
       JOIN public.inventario_lote il
-        ON il.id=cls.lote_id AND il.empresa_id=cls.empresa_id
+        ON il.id=asign.lote_id AND il.empresa_id=v_empresa
         AND il.sucursal_id=(SELECT c.sucursal_id FROM public.comprobante c WHERE c.id=p_comprobante_id AND c.empresa_id=v_empresa)
       LEFT JOIN LATERAL (
         SELECT SUM(dvl.cantidad)::numeric(12,3) AS cantidad
         FROM public.devolucion_venta_lote dvl
         JOIN public.devolucion_venta_linea dline ON dline.id=dvl.devolucion_linea_id
         JOIN public.devolucion_venta dv ON dv.id=dline.devolucion_id
-        WHERE dvl.lote_id=cls.lote_id
+        WHERE dvl.lote_id=asign.lote_id
           AND dline.comprobante_linea_id=v_linea_id
           AND dv.comprobante_id=p_comprobante_id
           AND dv.empresa_id=v_empresa
           AND dv.estado='REGISTRADA'
           AND dv.id<>v_devolucion_id
       ) previo ON true
-      WHERE cls.empresa_id=v_empresa
-        AND cls.comprobante_id=p_comprobante_id
-        AND cls.producto_id=v_producto_id
-        AND cls.variante_id IS NOT DISTINCT FROM v_variante_id
-        AND cls.comprobante_linea_id=v_linea_id
-        AND cls.cantidad-COALESCE(previo.cantidad,0)>0
-      ORDER BY cls.id
-      FOR UPDATE OF cls,il
+      WHERE asign.cantidad-COALESCE(previo.cantidad,0)>0
+      ORDER BY asign.lote_id
+      FOR UPDATE OF il
     LOOP
       EXIT WHEN v_pendiente<=0.0005;
       v_tomar:=LEAST(v_pendiente,v_lote.disponible_devolver);
