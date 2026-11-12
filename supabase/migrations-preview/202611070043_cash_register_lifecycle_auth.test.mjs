@@ -6,9 +6,10 @@ const sql = readFileSync(new URL('./202611070043_cash_register_lifecycle_auth.sq
 const closeFn = sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_caja_cerrar_auth'));
 const movementFn = sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_caja_movimiento_auth'), sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_caja_cerrar_auth'));
 
-test('all cash lifecycle RPCs resolve the linked Supabase user through the actual auth_user_id column', () => {
-  assert.match(sql, /auth_user_id=v_auth/);
-  assert.doesNotMatch(sql, /supabase_auth_user_id/);
+test('all cash lifecycle RPCs resolve the linked Supabase user through the actual supabase_auth_user_id column', () => {
+  assert.match(sql, /supabase_auth_user_id=v_auth/);
+  assert.match(sql, /supabase_auth_user_id=v_auth/);
+  assert.doesNotMatch(sql, /(^|[^a-z_])auth_user_id=v_auth/);
 });
 
 test('cash close subtracts registered refunds by their actual payment method', () => {
