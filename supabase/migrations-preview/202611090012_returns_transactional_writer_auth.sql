@@ -68,13 +68,13 @@ DO $fk$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
-    WHERE conname='fk_caja_movimiento_devolucion_venta_caja'
+    WHERE conname='fk_caja_movimiento_devolucion_venta'
       AND conrelid='public.caja_movimiento'::regclass
   ) THEN
     ALTER TABLE public.caja_movimiento
-      ADD CONSTRAINT fk_caja_movimiento_devolucion_venta_caja
-      FOREIGN KEY (devolucion_venta_id,caja_id)
-      REFERENCES public.devolucion_venta(id,caja_id) ON DELETE RESTRICT;
+      ADD CONSTRAINT fk_caja_movimiento_devolucion_venta
+      FOREIGN KEY (devolucion_venta_id)
+      REFERENCES public.devolucion_venta(id) ON DELETE RESTRICT;
   END IF;
 END
 $fk$;
@@ -101,6 +101,7 @@ DECLARE
   v_motivo text:=left(btrim(coalesce(p_motivo,'')),500);
   v_key text:=btrim(coalesce(p_idempotency_key,''));
   v_hash text;
+  v_hash_legacy text;
   v_existente record;
   v_venta record;
   v_caja record;
