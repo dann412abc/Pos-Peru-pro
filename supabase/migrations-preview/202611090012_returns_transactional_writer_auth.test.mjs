@@ -31,6 +31,21 @@ test('FEFO wrapper restores original sale lots after transactional stock and cas
  assert.match(fefo,/devolucion_venta_lote/);
 });
 
+test('preflight permits an existing idempotency key to reach the transactional replay check',()=>{
+ const preflight=fs.readFileSync('supabase/migrations-preview/202611070047_returns_preflight_auth.sql','utf8');
+ assert.match(preflight,/IF FOUND THEN[\s\S]*'duplicado',true[\s\S]*v_prev\.id/);
+ assert.doesNotMatch(preflight,/La clave ya fue utilizada; consulte el historial antes de reintentar/);
+});
+test('committed returns explicitly use the state counted by history and FEFO restoration',()=>{
+ assert.match(sql,/monto_reembolsado,estado,idempotency_key,request_hash/);
+ assert.match(sql,/v_caja_id,v_motivo,v_total,v_credito,v_reembolso,'REGISTRADA',v_key,v_hash/);
+});
+test('FEFO return availability is aggregated once per original lot',()=>{
+ assert.match(fefo,/SELECT cls\.lote_id,SUM\(cls\.cantidad\)::numeric\(12,3\) AS cantidad/);
+ assert.match(fefo,/GROUP BY cls\.lote_id/);
+ assert.match(fefo,/FOR UPDATE OF il/);
+});
+
 test('partial return calculation refunds only the net line amount after line discounts',()=>{
  assert.match(sql, /\('comprobante_linea','descuento'\)/);
  assert.match(sql, /cl\.subtotal-cl\.descuento/);
