@@ -24,6 +24,18 @@ test('FEFO return traces original sale lots and prevents over-returning a lot',(
   assert.match(sql,/DEVCLIENTE-/);
 });
 
+test('partial returns serialize on the original sale line and cap restoration to its exact lot allocations',()=>{
+  const writer=fs.readFileSync('supabase/migrations-preview/202611090012_returns_transactional_writer_auth.sql','utf8');
+  assert.match(writer,/WHERE cl\.id=v_linea_id AND cl\.comprobante_id=p_comprobante_id[\s\S]*FOR UPDATE OF cl/);
+  assert.match(writer,/v_cantidad>v_disponible\+0\.0001/);
+  assert.match(sql,/cls\.comprobante_linea_id=v_linea_id/);
+  assert.match(sql,/SUM\(cls\.cantidad\)::numeric\(12,3\) AS cantidad/);
+  assert.match(sql,/dline\.comprobante_linea_id=v_linea_id/);
+  assert.match(sql,/asign\.cantidad-COALESCE\(previo\.cantidad,0\)/);
+  assert.match(sql,/UPDATE public\.inventario_lote[\s\S]*SET cantidad_disponible=cantidad_disponible\+v_tomar/);
+  assert.match(sql,/INSERT INTO public\.devolucion_venta_lote\(devolucion_linea_id,lote_id,cantidad\)/);
+});
+
 test('duplicate original sale lines are rejected before the transactional writer runs',()=>{
   assert.match(sql,/Una línea original solo puede aparecer una vez por devolución/);
   assert.match(sql,/GROUP BY NULLIF\(entrada\.value->>'comprobanteLineaId',''\)[\s\S]*HAVING COUNT\(\*\)>1/);
