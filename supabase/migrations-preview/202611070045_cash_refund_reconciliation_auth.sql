@@ -7,7 +7,8 @@ DECLARE
  v_auth uuid:=auth.uid(); v_usuario integer; v_empresa integer; v_sucursal integer;
  v_saldo numeric(12,2); v_ventas integer; v_total numeric(12,2);
  v_efectivo numeric(12,2); v_tarjeta numeric(12,2); v_yape numeric(12,2); v_plin numeric(12,2); v_credito numeric(12,2);
- v_mov_efectivo numeric(12,2); v_dev_total numeric(12,2); v_dev_efectivo numeric(12,2);
+ v_mov_efectivo numeric(12,2); v_mov_tarjeta numeric(12,2); v_mov_yape numeric(12,2); v_mov_plin numeric(12,2);
+ v_dev_total numeric(12,2); v_dev_efectivo numeric(12,2);
  v_dev_tarjeta numeric(12,2); v_dev_yape numeric(12,2); v_dev_plin numeric(12,2);
  v_efectivo_esperado numeric(12,2);
 BEGIN
@@ -19,8 +20,10 @@ BEGIN
  JOIN public.usuario_sucursal us ON us.sucursal_id=c.sucursal_id AND us.usuario_id=v_usuario
  WHERE c.id=p_caja_id AND c.usuario_id=v_usuario;
  IF NOT FOUND THEN RAISE EXCEPTION 'Caja no encontrada o no autorizada' USING ERRCODE='42501'; END IF;
- SELECT COUNT(*)::integer,COALESCE(SUM(c.total),0)::numeric(12,2) INTO v_ventas,v_total
- FROM public.comprobante c WHERE c.caja_id=p_caja_id AND c.empresa_id=v_empresa AND c.estado <> 'ANULADA';
+ SELECT COUNT(*)::integer,COALESCE(SUM(GREATEST(0,c.total-COALESCE(d.total_devuelto,0))),0)::numeric(12,2) INTO v_ventas,v_total
+ FROM public.comprobante c
+ LEFT JOIN LATERAL (SELECT SUM(dv.total_devolucion)::numeric AS total_devuelto FROM public.devolucion_venta dv WHERE dv.comprobante_id=c.id AND dv.empresa_id=v_empresa AND dv.estado='REGISTRADA') d ON true
+ WHERE c.caja_id=p_caja_id AND c.empresa_id=v_empresa AND c.estado <> 'ANULADA';
  SELECT
  COALESCE(SUM(monto) FILTER(WHERE metodo='EFECTIVO'),0),COALESCE(SUM(monto) FILTER(WHERE metodo='TARJETA'),0),
  COALESCE(SUM(monto) FILTER(WHERE metodo='YAPE'),0),COALESCE(SUM(monto) FILTER(WHERE metodo='PLIN'),0),
@@ -45,17 +48,21 @@ BEGIN
  FROM public.devolucion_venta_pago dp
  JOIN public.devolucion_venta d ON d.id=dp.devolucion_id AND d.empresa_id=dp.empresa_id
  WHERE d.caja_id=p_caja_id AND d.empresa_id=v_empresa AND d.estado='REGISTRADA';
- SELECT COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END)
- FILTER(WHERE metodo_pago='EFECTIVO'),0) INTO v_mov_efectivo
- FROM public.caja_movimiento WHERE caja_id=p_caja_id AND usuario_id=v_usuario;
+ SELECT
+ COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='EFECTIVO'),0),
+ COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='TARJETA'),0),
+ COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='YAPE'),0),
+ COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='PLIN'),0)
+ INTO v_mov_efectivo,v_mov_tarjeta,v_mov_yape,v_mov_plin
+ FROM public.caja_movimiento WHERE caja_id=p_caja_id AND usuario_id=v_usuario AND devolucion_venta_id IS NULL;
  v_efectivo_esperado:=round(COALESCE(v_saldo,0)+COALESCE(v_efectivo,0)-COALESCE(v_dev_efectivo,0)+COALESCE(v_mov_efectivo,0),2);
  RETURN jsonb_build_object(
  'cantidadVentas',v_ventas,'totalVentas',v_total,'totalDevoluciones',round(COALESCE(v_dev_total,0),2),
  'porMetodo',jsonb_build_object(
- 'EFECTIVO',round(COALESCE(v_efectivo,0)-COALESCE(v_dev_efectivo,0),2),
- 'TARJETA',round(COALESCE(v_tarjeta,0)-COALESCE(v_dev_tarjeta,0),2),
- 'YAPE',round(COALESCE(v_yape,0)-COALESCE(v_dev_yape,0),2),
- 'PLIN',round(COALESCE(v_plin,0)-COALESCE(v_dev_plin,0),2),
+ 'EFECTIVO',round(COALESCE(v_efectivo,0)-COALESCE(v_dev_efectivo,0)+COALESCE(v_mov_efectivo,0),2),
+ 'TARJETA',round(COALESCE(v_tarjeta,0)-COALESCE(v_dev_tarjeta,0)+COALESCE(v_mov_tarjeta,0),2),
+ 'YAPE',round(COALESCE(v_yape,0)-COALESCE(v_dev_yape,0)+COALESCE(v_mov_yape,0),2),
+ 'PLIN',round(COALESCE(v_plin,0)-COALESCE(v_dev_plin,0)+COALESCE(v_mov_plin,0),2),
  'CREDITO',round(COALESCE(v_credito,0),2)),
  'efectivoEsperado',v_efectivo_esperado);
 END; $fn$;
@@ -76,7 +83,7 @@ BEGIN
  SELECT COALESCE(jsonb_agg(x.item ORDER BY x.fecha DESC,x.orden DESC),'[]'::jsonb) INTO v_result FROM (
   SELECT jsonb_build_object('id',cm.id,'tipo',cm.tipo,'metodoPago',cm.metodo_pago,'monto',cm.monto,'motivo',cm.motivo,'createdAt',cm.created_at) item,
    cm.created_at fecha,cm.id orden
-  FROM public.caja_movimiento cm WHERE cm.caja_id=p_caja_id AND cm.usuario_id=v_usuario
+  FROM public.caja_movimiento cm WHERE cm.caja_id=p_caja_id AND cm.usuario_id=v_usuario AND cm.devolucion_venta_id IS NULL
   UNION ALL
   SELECT jsonb_build_object('id',-dp.id,'tipo','SALIDA','metodoPago',dp.metodo_pago,'monto',dp.monto,
     'motivo','Reembolso devolución #'||d.id,'createdAt',dp.created_at) item,dp.created_at fecha,-dp.id orden

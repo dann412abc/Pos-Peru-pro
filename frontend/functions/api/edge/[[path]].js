@@ -19,6 +19,25 @@ function getBearer(request) {
   return match ? match[1] : null;
 }
 
+
+async function stockMovementRpcResponse(response, bodyText) {
+  let payload = null;
+  try { payload = JSON.parse(bodyText); } catch { /* preserve non-JSON PostgREST responses */ }
+  const detail = [payload?.message, payload?.details, payload?.hint, payload?.error]
+    .filter(value => typeof value === 'string').join(' ');
+  if (detail.includes('INVENTORY_COUNT_OPEN') ||
+      (payload?.code === '55000' && detail.toLowerCase().includes('physical count'))) {
+    return json({
+      error: 'INVENTORY_COUNT_OPEN',
+      message: 'Hay un inventario físico abierto en esta sucursal. Cierra el conteo antes de registrar ventas, compras, devoluciones o movimientos de stock.',
+    }, 409);
+  }
+  return new Response(bodyText, {
+    status: response.status,
+    headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] },
+  });
+}
+
 function validSupabaseConfig(env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
   try {
@@ -226,8 +245,9 @@ export async function onRequest({ request, env, params }) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
         !Number.isSafeInteger(Number(payload.sucursalId)) || Number(payload.sucursalId) <= 0 ||
         typeof payload.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(payload.idempotencyKey) ||
+        !['01','03','NV'].includes(payload.tipo) ||
         !Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 200 || !payload.lineas.every(validLine) ||
-        !Array.isArray(payload.pagos) || payload.pagos.length > 20 || !payload.pagos.every(validPayment)) {
+        !Array.isArray(payload.pagos) || payload.pagos.length < 1 || payload.pagos.length > 5 || !payload.pagos.every(validPayment)) {
       return json({ error: 'INVALID_SALES_IDEMPOTENCY_QUERY', message: 'Verifica sucursal, clave, productos, cantidades, precios, descuentos y pagos.' }, 400);
     }
     const encoded = JSON.stringify({ p_payload: payload });
@@ -315,7 +335,7 @@ export async function onRequest({ request, env, params }) {
     } catch { return json({ error: 'CASH_SUMMARY_UNAVAILABLE', message: 'No se pudo consultar el resumen de caja en Supabase.' }, 502); }
   }
 
-  // Consultas de devoluciones en Supabase: solo lectura; el registro permanece bloqueado hasta completar la RPC transaccional.
+  // Consultas de devoluciones en Supabase: historial, búsqueda y disponibilidad; el registro usa la ruta transaccional independiente.
   if (request.method === 'GET' && ['returns/list','returns/search','returns/availability'].includes(route)) {
     const token = getBearer(request);
     if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
@@ -380,6 +400,73 @@ export async function onRequest({ request, env, params }) {
       if (response.status === 401 || response.status === 403) return json({ error: 'SUPPLIER_ANALYTICS_FORBIDDEN' }, 403);
       return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
     } catch { return json({ error: 'SUPPLIER_ANALYTICS_UNAVAILABLE', message: 'No se pudo consultar el análisis de proveedores en Supabase.' }, 502); }
+  }
+
+  // Ajustes de inventario con lotes e idempotencia; la autorización final vive en PostgreSQL.
+  // Transferencias atómicas entre sucursales: el SQL valida permisos, stock y lotes FEFO.
+  if (request.method === 'POST' && route === 'inventory/transfers') {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+    const p = body?.payload;
+    const validId = (v) => Number.isSafeInteger(v) && v > 0;
+    if (!p || typeof p !== 'object' || Array.isArray(p) ||
+        !validId(p.sucursalOrigenId) || !validId(p.sucursalDestinoId) ||
+        p.sucursalOrigenId === p.sucursalDestinoId ||
+        typeof p.motivo !== 'string' || p.motivo.trim().length < 5 || p.motivo.length > 200 ||
+        typeof p.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(p.idempotencyKey) ||
+        !Array.isArray(p.lineas) || p.lineas.length < 1 || p.lineas.length > 200 ||
+        p.lineas.some(x => !x || typeof x !== 'object' || Array.isArray(x) ||
+          !validId(x.productoId) || !(x.varianteId == null || validId(x.varianteId)) ||
+          typeof x.cantidad !== 'number' || !Number.isFinite(x.cantidad) || x.cantidad <= 0 ||
+          Math.round(x.cantidad * 1000) !== x.cantidad * 1000) ||
+        new Set(p.lineas.map(x => `${x.productoId}:${x.varianteId ?? 'base'}`)).size !== p.lineas.length) {
+      return json({ error: 'INVALID_INVENTORY_TRANSFER', message: 'Verifica sucursales, productos, variantes, cantidades, motivo y clave de operación.' }, 400);
+    }
+    const encoded = JSON.stringify({ p_payload: { ...p, motivo: p.motivo.trim() } });
+    if (encoded.length > 64000) return json({ error: 'INVENTORY_TRANSFER_TOO_LARGE' }, 413);
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_inventario_transferir_auth', supabase), {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: encoded,
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'INVENTORY_TRANSFER_MIGRATION_REQUIRED', message: 'La transferencia segura no está instalada en staging; no se modificó el inventario.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_TRANSFER_FORBIDDEN', message: 'No tienes permiso para transferir entre estas sucursales.' }, 403);
+      return stockMovementRpcResponse(response, result);
+    } catch { return json({ error: 'INVENTORY_TRANSFER_UNAVAILABLE', message: 'No se pudo confirmar la transferencia. Conserva la misma clave para reintentar.' }, 502); }
+  }
+
+  if (request.method === 'POST' && route === 'inventory/adjust') {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+    const validId = (v) => Number.isSafeInteger(v) && v > 0;
+    const p = body?.payload;
+    if (!p || typeof p !== 'object' || Array.isArray(p) ||
+        !validId(p.sucursalId) || !validId(p.productoId) ||
+        !(p.varianteId == null || validId(p.varianteId)) ||
+        !['ENTRADA','SALIDA'].includes(p.tipo) ||
+        typeof p.cantidad !== 'number' || !Number.isFinite(p.cantidad) || p.cantidad <= 0 ||
+        Math.round(p.cantidad * 1000) !== p.cantidad * 1000 ||
+        typeof p.motivo !== 'string' || p.motivo.trim().length < 5 || p.motivo.length > 200 ||
+        typeof p.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(p.idempotencyKey)) {
+      return json({ error: 'INVALID_INVENTORY_ADJUSTMENT', message: 'Verifica sucursal, producto, variante, tipo, cantidad, motivo y clave de operación.' }, 400);
+    }
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_inventario_ajustar_lote_auth', supabase), {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: JSON.stringify({ p_payload: p }),
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'INVENTORY_ADJUSTMENT_MIGRATION_REQUIRED', message: 'Falta instalar el ajuste de inventario con lotes en el entorno de pruebas; no se modificó el stock.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_ADJUSTMENT_FORBIDDEN', message: 'No tienes permisos para ajustar este inventario.' }, 403);
+      return stockMovementRpcResponse(response, result);
+    } catch { return json({ error: 'INVENTORY_ADJUSTMENT_UNAVAILABLE', message: 'No se pudo registrar el ajuste.' }, 502); }
   }
 
   // Control de vencimientos: consulta de solo lectura por sucursal autorizada.
@@ -456,12 +543,34 @@ export async function onRequest({ request, env, params }) {
       return json({ error: 'INVALID_PURCHASE_PAYLOAD', message: 'La solicitud de recepción no tiene el formato esperado.' }, 400);
     }
     const payload = body.payload;
-    if (!Number.isSafeInteger(Number(payload.sucursalId)) || Number(payload.sucursalId) <= 0 ||
-        !Number.isSafeInteger(Number(payload.proveedorId)) || Number(payload.proveedorId) <= 0 ||
+    const validPositive = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0;
+    const validNonNegative = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+    const validLine = (line) => line && typeof line === 'object' && !Array.isArray(line) &&
+      Number.isSafeInteger(line.productoId) && line.productoId > 0 &&
+      (line.varianteId == null || (Number.isSafeInteger(line.varianteId) && line.varianteId > 0)) &&
+      validPositive(line.cantidad) && typeof line.unidadCompra === 'string' && line.unidadCompra.trim().length > 0 &&
+      validPositive(line.unidadesPorEmpaque) && validPositive(line.costoEmpaque) &&
+      validPositive(line.costoUnitario) && [10, 20, 30].includes(line.tipoIgv) &&
+      (line.codigoLote == null || (typeof line.codigoLote === 'string' && line.codigoLote.length <= 80)) &&
+      (line.fechaVencimiento == null || (typeof line.fechaVencimiento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(line.fechaVencimiento)));
+    const validMethods = new Set(['EFECTIVO','YAPE','PLIN','TARJETA','TRANSFERENCIA']);
+    const validPayment = (payment) => payment && typeof payment === 'object' && !Array.isArray(payment) &&
+      validMethods.has(payment.metodoPago) && validPositive(payment.monto) &&
+      (payment.cajaId == null || (Number.isSafeInteger(payment.cajaId) && payment.cajaId > 0)) &&
+      (payment.referencia == null || (typeof payment.referencia === 'string' && payment.referencia.length <= 120));
+    if (!Number.isSafeInteger(payload.sucursalId) || payload.sucursalId <= 0 ||
+        !Number.isSafeInteger(payload.proveedorId) || payload.proveedorId <= 0 ||
+        !['CONTADO','CREDITO'].includes(payload.condicionPago) ||
+        typeof payload.tipoDocumento !== 'string' || !payload.tipoDocumento.trim() ||
+        typeof payload.serie !== 'string' || !payload.serie.trim() ||
+        typeof payload.numero !== 'string' || !payload.numero.trim() ||
+        typeof payload.fechaDocumento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.fechaDocumento) ||
+        (payload.condicionPago === 'CREDITO' && (typeof payload.fechaVencimiento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.fechaVencimiento) || payload.fechaVencimiento < payload.fechaDocumento)) ||
         typeof payload.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(payload.idempotencyKey) ||
-        !Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 200 ||
-        !Array.isArray(payload.pagos) || payload.pagos.length > 20) {
-      return json({ error: 'INVALID_PURCHASE_PAYLOAD', message: 'Verifica sucursal, proveedor, clave de idempotencia, líneas y pagos.' }, 400);
+        !Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 200 || !payload.lineas.every(validLine) ||
+        !Array.isArray(payload.pagos) || payload.pagos.length > 8 || !payload.pagos.every(validPayment) ||
+        (payload.condicionPago === 'CREDITO' && payload.pagos.length > 0)) {
+      return json({ error: 'INVALID_PURCHASE_PAYLOAD', message: 'Verifica sucursal, proveedor, documento, condición de pago, líneas, cantidades, costos y pagos.' }, 400);
     }
     const encoded = JSON.stringify({ p_payload: payload });
     if (encoded.length > 64_000) return json({ error: 'PURCHASE_PAYLOAD_TOO_LARGE', message: 'La compra supera el tamaño permitido.' }, 413);
@@ -472,7 +581,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'PURCHASE_MIGRATION_REQUIRED', message: 'La recepción transaccional aún no está instalada en staging; la compra no se registró.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'PURCHASE_FORBIDDEN', message: 'La sesión no tiene permiso para recibir compras en esta sucursal.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch { return json({ error: 'PURCHASES_UNAVAILABLE', message: 'No se pudo contactar con Supabase; no se confirmó la recepción.' }, 502); }
   }
 
@@ -554,7 +663,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'PURCHASE_RETURN_MIGRATION_REQUIRED', message: 'La devolución definitiva no está instalada en staging; no se modificó el inventario.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'PURCHASE_RETURN_FORBIDDEN', message: 'La sesión no tiene permiso para devolver esta compra.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch { return json({ error: 'PURCHASE_RETURN_UNAVAILABLE', message: 'No se pudo confirmar la devolución en Supabase.' }, 502); }
   }
 
@@ -578,7 +687,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'PURCHASE_CANCEL_MIGRATION_REQUIRED', message: 'La anulación segura no está instalada en staging; no se modificó la compra.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'PURCHASE_CANCEL_FORBIDDEN', message: 'La sesión no tiene permiso para anular esta compra.' }, 403);
-      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+      return stockMovementRpcResponse(response, result);
     } catch { return json({ error: 'PURCHASE_CANCEL_UNAVAILABLE', message: 'No se pudo confirmar la anulación en Supabase.' }, 502); }
   }
 
@@ -606,6 +715,7 @@ export async function onRequest({ request, env, params }) {
       const result = await response.text();
       if (response.status === 404) return json({ error: 'PURCHASE_ORDERS_MIGRATION_REQUIRED', message: 'Las órdenes de compra aún no están instaladas en staging; no se modificó la orden.' }, 409);
       if (response.status === 401 || response.status === 403) return json({ error: 'PURCHASE_ORDERS_FORBIDDEN' }, 403);
+      if (action === 'receive') return stockMovementRpcResponse(response, result);
       return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
     } catch { return json({ error: 'PURCHASE_ORDERS_UNAVAILABLE', message: 'No se pudo contactar con Supabase.' }, 502); }
   }
@@ -679,6 +789,185 @@ export async function onRequest({ request, env, params }) {
       if (response.status === 404) return json({ error: 'CATALOG_MIGRATION_REQUIRED', message: 'Falta instalar la función SQL de catálogo en el entorno de pruebas.' }, 409);
       return new Response(payload, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
     } catch { return json({ error: 'CATALOG_UNAVAILABLE' }, 502); }
+  }
+
+  // Registro de venta con consumo FEFO atómico; evita llamar directamente a la RPC sin lotes.
+  if (request.method === 'POST' && route === 'sales/register') {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+    const payload = body?.payload;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
+        !Number.isSafeInteger(Number(payload.sucursalId)) || Number(payload.sucursalId) <= 0 ||
+        typeof payload.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,100}$/.test(payload.idempotencyKey) ||
+        !Array.isArray(payload.lineas) || payload.lineas.length < 1 || payload.lineas.length > 200 ||
+        !Array.isArray(payload.pagos) || payload.pagos.length < 1 || payload.pagos.length > 5) {
+      return json({ error: 'INVALID_SALE_PAYLOAD', message: 'Verifica sucursal, clave de operación, líneas y pagos.' }, 400);
+    }
+    const encoded = JSON.stringify({ p_venta: payload });
+    if (encoded.length > 64000) return json({ error: 'SALE_PAYLOAD_TOO_LARGE' }, 413);
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_registrar_venta_fefo_auth', supabase), {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: encoded,
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'SALE_FEFO_MIGRATION_REQUIRED', message: 'La venta con control FEFO no está instalada en el entorno de pruebas; no se registró la venta.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'SALE_FORBIDDEN', message: 'La sesión no tiene autorización para registrar esta venta.' }, 403);
+      return stockMovementRpcResponse(response, result);
+    } catch {
+      return json({ error: 'SALE_REGISTER_UNAVAILABLE', message: 'No se pudo confirmar la venta en Supabase. Conserva la misma clave para reintentar.' }, 502);
+    }
+  }
+
+  // Registro transaccional de devolución de venta. La RPC deriva usuario/empresa desde auth.uid().
+  if (request.method === 'POST' && route === 'returns/register') {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON', message: 'El cuerpo debe ser JSON válido.' }, 400); }
+    const comprobanteId = Number(body?.comprobanteId);
+    const motivo = typeof body?.motivo === 'string' ? body.motivo.trim() : '';
+    const key = typeof body?.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+    const lineas = body?.lineas;
+    const pagos = body?.pagos;
+    if (!Number.isSafeInteger(comprobanteId) || comprobanteId <= 0 ||
+        motivo.length < 5 || motivo.length > 500 ||
+        !/^[A-Za-z0-9._:-]{8,100}$/.test(key) ||
+        !Array.isArray(lineas) || lineas.length < 1 || lineas.length > 100 ||
+        lineas.some(x => !x || !Number.isSafeInteger(Number(x.comprobanteLineaId)) || Number(x.comprobanteLineaId) <= 0 ||
+          !Number.isFinite(Number(x.cantidad)) || Number(x.cantidad) <= 0 || Math.round(Number(x.cantidad) * 1000) !== Number(x.cantidad) * 1000 ||
+          (x.reingresarStock !== undefined && typeof x.reingresarStock !== 'boolean')) ||
+        new Set(lineas.map(x => Number(x.comprobanteLineaId))).size !== lineas.length ||
+        !Array.isArray(pagos) || pagos.length > 4 ||
+        pagos.some(x => !x || !['EFECTIVO','TARJETA','YAPE','PLIN'].includes(x.metodoPago) ||
+          !Number.isFinite(Number(x.monto)) || Number(x.monto) <= 0 || Math.round(Number(x.monto) * 100) !== Number(x.monto) * 100 ||
+          (x.referencia != null && (typeof x.referencia !== 'string' || x.referencia.trim().length > 120)))) {
+      return json({ error: 'INVALID_RETURN_PAYLOAD', message: 'Verifica comprobante, motivo, clave, líneas y medios de reembolso.' }, 400);
+    }
+    if (new Set(pagos.map(x => x.metodoPago)).size !== pagos.length) {
+      return json({ error: 'DUPLICATE_RETURN_PAYMENT_METHOD', message: 'Consolida los importes de cada medio de reembolso.' }, 400);
+    }
+    const encoded = JSON.stringify({
+      p_comprobante_id: comprobanteId,
+      p_payload: {
+        motivo,
+        idempotencyKey: key,
+        lineas: lineas.map(x => ({ comprobanteLineaId: Number(x.comprobanteLineaId), cantidad: Number(x.cantidad), reingresarStock: x.reingresarStock !== false })),
+        pagos: pagos.map(x => ({ metodoPago: x.metodoPago, monto: Number(x.monto), referencia: x.referencia?.trim() || null })),
+      },
+    });
+    if (encoded.length > 32000) return json({ error: 'RETURN_PAYLOAD_TOO_LARGE', message: 'La devolución supera el tamaño permitido.' }, 413);
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_devolucion_registrar_auth', supabase), {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: encoded,
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'RETURN_REGISTER_NOT_INSTALLED', message: 'La RPC autenticada de devoluciones no está disponible en Supabase.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'RETURN_REGISTER_FORBIDDEN', message: 'La sesión no tiene autorización para registrar esta devolución.' }, 403);
+      return stockMovementRpcResponse(response, result);
+    } catch {
+      return json({ error: 'RETURN_REGISTER_UNAVAILABLE', message: 'No se pudo confirmar la devolución en Supabase. Conserva la misma clave para reintentar.' }, 502);
+    }
+  }
+
+  // Mermas Supabase: el servidor solo enruta; permisos, FEFO e idempotencia se validan en PostgreSQL.
+  if (request.method === 'GET' && (route === 'inventory/waste/lots' || route === 'inventory/waste/history')) {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    const sucursalId = Number(new URL(request.url).searchParams.get('sucursalId'));
+    if (!Number.isSafeInteger(sucursalId) || sucursalId <= 0) return json({ error: 'INVALID_WASTE_QUERY', message: 'Selecciona una sucursal válida.' }, 400);
+    const rpc = route === 'inventory/waste/lots' ? 'pos_inventario_lotes_merma_auth' : 'pos_inventario_mermas_listar_auth';
+    const args = route === 'inventory/waste/lots' ? { p_sucursal_id: sucursalId } : { p_sucursal_id: sucursalId };
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/' + rpc, supabase), {
+        method: 'POST', headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: JSON.stringify(args),
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'INVENTORY_WASTE_MIGRATION_REQUIRED', message: 'El control de mermas Supabase no está instalado en staging.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_WASTE_FORBIDDEN', message: 'No tienes permiso para consultar esta sucursal.' }, 403);
+      return new Response(result, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+    } catch { return json({ error: 'INVENTORY_WASTE_UNAVAILABLE', message: 'No se pudo consultar las mermas en Supabase.' }, 502); }
+  }
+
+  if (request.method === 'POST' && route === 'inventory/waste') {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+    const p = body?.payload;
+    const validId = (v) => Number.isSafeInteger(v) && v > 0;
+    if (!p || typeof p !== 'object' || Array.isArray(p) ||
+        !validId(p.sucursalId) || !validId(p.productoId) || !(p.varianteId == null || validId(p.varianteId)) ||
+        typeof p.cantidad !== 'number' || !Number.isFinite(p.cantidad) || p.cantidad <= 0 || Math.round(p.cantidad * 1000) !== p.cantidad * 1000 ||
+        !['VENCIDO','DANADO','PERDIDA','CONTAMINACION','OTRO'].includes(p.motivoTipo) ||
+        typeof p.observacion !== 'string' || p.observacion.trim().length < 5 || p.observacion.length > 500 ||
+        typeof p.idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(p.idempotencyKey)) {
+      return json({ error: 'INVALID_INVENTORY_WASTE', message: 'Verifica producto, sucursal, cantidad, motivo, observación y clave.' }, 400);
+    }
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/pos_inventario_merma_registrar_auth', supabase), {
+        method: 'POST', headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: JSON.stringify({ p_payload: { ...p, observacion: p.observacion.trim() } }),
+      });
+      const result = await response.text();
+      if (response.status === 404) return json({ error: 'INVENTORY_WASTE_MIGRATION_REQUIRED', message: 'El registro de mermas no está instalado en staging; no se modificó el stock.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_WASTE_FORBIDDEN', message: 'No tienes permiso para registrar mermas en esta sucursal.' }, 403);
+      return stockMovementRpcResponse(response, result);
+    } catch { return json({ error: 'INVENTORY_WASTE_UNAVAILABLE', message: 'No se pudo confirmar la merma. Conserva la misma clave para reintentar.' }, 502); }
+  }
+
+  // Inventario físico: snapshot, conteo de líneas y cierre atómico mediante RPC autenticadas.
+  if (route === 'inventory/counts' || route.startsWith('inventory/counts/')) {
+    const token = getBearer(request);
+    if (!token) return json({ error: 'UNAUTHORIZED', message: 'Falta la sesión Bearer de Supabase.' }, 401);
+    let rpc, args;
+    if (request.method === 'GET' && route === 'inventory/counts') {
+      rpc = 'pos_inventario_conteos_listar_auth'; args = {};
+    } else if (request.method === 'POST' && route === 'inventory/counts') {
+      let body; try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+      const sucursalId = body?.sucursalId;
+      const observacion = typeof body?.observacion === 'string' ? body.observacion.trim() : '';
+      if (!Number.isSafeInteger(sucursalId) || sucursalId <= 0 || observacion.length < 5 || observacion.length > 200) {
+        return json({ error: 'INVALID_INVENTORY_COUNT', message: 'Verifica sucursal y descripción del inventario.' }, 400);
+      }
+      rpc = 'pos_inventario_conteo_abrir_auth'; args = { p_sucursal_id: sucursalId, p_observacion: observacion };
+    } else {
+      const detail = route.match(/^inventory\/counts\/(\d+)$/);
+      const close = route.match(/^inventory\/counts\/(\d+)\/close$/);
+      if (request.method === 'GET' && detail) {
+        rpc = 'pos_inventario_conteo_detalle_auth'; args = { p_conteo_id: Number(detail[1]) };
+      } else if (request.method === 'POST' && close) {
+        rpc = 'pos_inventario_conteo_cerrar_auth'; args = { p_conteo_id: Number(close[1]) };
+      } else if (request.method === 'POST' && route === 'inventory/counts/lines/count') {
+        let body; try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+        if (!Number.isSafeInteger(body?.lineaId) || body.lineaId <= 0 ||
+            typeof body?.cantidadContada !== 'number' || !Number.isFinite(body.cantidadContada) ||
+            body.cantidadContada < 0 || Math.round(body.cantidadContada * 1000) !== body.cantidadContada * 1000) {
+          return json({ error: 'INVALID_INVENTORY_COUNT_LINE', message: 'Ingresa una cantidad válida con hasta 3 decimales.' }, 400);
+        }
+        rpc = 'pos_inventario_conteo_contar_auth'; args = { p_linea_id: body.lineaId, p_cantidad: body.cantidadContada };
+      } else {
+        return json({ error: 'INVENTORY_COUNT_ROUTE_NOT_FOUND' }, 404);
+      }
+    }
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/' + rpc, supabase), {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${token}`,
+          'content-type': 'application/json', 'accept-profile': 'public', 'content-profile': 'public' },
+        body: JSON.stringify(args),
+      });
+      const payload = await response.text();
+      if (response.status === 404) return json({ error: 'INVENTORY_COUNT_MIGRATION_REQUIRED', message: 'El inventario físico Supabase no está instalado en staging; no se aplicaron cambios.' }, 409);
+      if (response.status === 401 || response.status === 403) return json({ error: 'INVENTORY_COUNT_FORBIDDEN', message: 'No tienes permiso para gestionar el inventario físico de esta sucursal.' }, 403);
+      return new Response(payload, { status: response.status, headers: { ...JSON_HEADERS, 'content-type': response.headers.get('content-type') || JSON_HEADERS['content-type'] } });
+    } catch { return json({ error: 'INVENTORY_COUNT_UNAVAILABLE', message: 'No se pudo confirmar la operación de inventario físico. Puedes reintentar sin duplicar el cierre.' }, 502); }
   }
 
   if (request.method === 'POST' && route.startsWith('rpc/')) {

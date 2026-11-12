@@ -9,13 +9,21 @@ const client=fs.readFileSync(path.join(here,'../../../src/api/client.ts'),'utf8'
 test('auth provider Supabase is exported explicitly for module routing',()=>{
  assert.match(client,/export const ES_SUPABASE_AUTH = SUPABASE_AUTH/);
 });
-test('Devoluciones does not call legacy endpoints while Supabase Auth is active',()=>{
- assert.match(page,/if \(ES_MODO_DEMO \|\| ES_SUPABASE_AUTH \|\| !sucursalId\) return/);
- assert.match(page,/if \(!ES_SUPABASE_AUTH\) recargar\(\)/);
- assert.match(page,/if \(ES_SUPABASE_AUTH\) return/);
- assert.match(page,/API antigua/);
+test('Devoluciones routes read, search and availability through Supabase Auth',()=>{
+ assert.match(page,/if \(ES_MODO_DEMO \|\| !sucursalId\) return/);
+ assert.match(page,/if \(ES_SUPABASE_AUTH\) \{\s*setDevoluciones\(await fetchSupabaseReturns\(sucursalId\) as Devolucion\[\]\);\s*return;/);
+ assert.match(page,/ES_SUPABASE_AUTH\s*\?\s*await fetchSupabaseReturnAvailability\(Number\(id\)\)/);
+ assert.match(page,/ES_SUPABASE_AUTH\s*\?\s*await searchSupabaseReturnReceipts\(q, sucursalId\)/);
 });
 test('legacy flow remains available outside Supabase Auth mode',()=>{
  assert.match(page,/api\.post\(`\/devoluciones\/ventas\/\$\{disponibilidad\.comprobante\.id\}`/);
  assert.match(page,/api\.get\('\/devoluciones'/);
+});
+test('return search only offers document types accepted by the transactional return service',()=>{
+ assert.match(page,/\['01', '03'\]/);
+ assert.doesNotMatch(page,/\['01', '03', 'NV'\]/);
+ assert.match(page,/boletas y facturas/);
+ const readSql=fs.readFileSync(path.join(here,'../../../../supabase/migrations-preview/202611090001_returns_read_auth.sql'),'utf8');
+ assert.match(readSql,/c\.tipo IN \('01','03'\)/);
+ assert.doesNotMatch(readSql,/c\.tipo IN \('01','03','NV'\)/);
 });

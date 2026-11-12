@@ -66,10 +66,13 @@ BEGIN
   SELECT id,request_hash INTO v_prev FROM public.devolucion_venta
   WHERE empresa_id=v_empresa AND usuario_id=v_usuario AND idempotency_key=v_key;
   IF FOUND THEN
-    -- No se compara aquí el hash: el servicio legado usa SHA-256 sobre un
-    -- objeto normalizado distinto. La clave existente se trata como conflicto
-    -- hasta que el RPC de commit comparta exactamente el mismo canonizador.
-    RAISE EXCEPTION 'La clave ya fue utilizada; consulte el historial antes de reintentar' USING ERRCODE='23505';
+    -- La decisión final sobre igualdad de payload corresponde al escritor
+    -- transaccional, que compara su huella canónica y devuelve el replay exacto.
+    -- No bloquear aquí la recuperación: si el payload cambió, el commit lo rechazará.
+    RETURN jsonb_build_object(
+      'ok',true,'duplicado',true,'devolucionId',v_prev.id,
+      'mensaje','La clave ya existe; se verificará el reintento en el registro transaccional.'
+    );
   END IF;
 
   SELECT c.sucursal_id,c.cliente_id,c.tipo,c.estado,c.caja_id

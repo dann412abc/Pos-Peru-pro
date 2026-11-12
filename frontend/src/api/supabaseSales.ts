@@ -5,7 +5,7 @@ import { getAccessToken } from './client';
 export type SupabaseSalePayload = {
   sucursalId: number;
   clienteId: number;
-  tipo: '01' | '03';
+  tipo: '01' | '03' | 'NV';
   pagos: Array<{ metodo: 'EFECTIVO' | 'TARJETA' | 'YAPE' | 'PLIN' | 'CREDITO'; monto: number; montoRecibido?: number }>;
   fechaVencimiento?: string;
   motivoDescuento?: string;
@@ -104,7 +104,7 @@ function convertirRecuperacion(result: SupabaseSaleRecovery): SupabaseSaleResult
 export async function crearVentaSupabase(payload: SupabaseSalePayload): Promise<SupabaseSaleResult> {
   if (!Number.isSafeInteger(payload.sucursalId) || payload.sucursalId <= 0 ||
       !Number.isSafeInteger(payload.clienteId) || payload.clienteId <= 0 ||
-      !['01', '03'].includes(payload.tipo) || !payload.idempotencyKey ||
+      !['01', '03', 'NV'].includes(payload.tipo) || !payload.idempotencyKey ||
       !Array.isArray(payload.lineas) || payload.lineas.length < 1 ||
       !Array.isArray(payload.pagos) || payload.pagos.length < 1) {
     throw new Error('La venta no contiene una sucursal, cliente, comprobante, líneas, pagos o clave de seguridad válidos.');
@@ -119,18 +119,19 @@ export async function crearVentaSupabase(payload: SupabaseSalePayload): Promise<
   }
 
   try {
-    const response = await axios.post('/api/edge/rpc/pos_venta_crear_auth', { p_payload: payload }, {
+    const response = await axios.post('/api/edge/sales/register', { payload }, {
       headers: authHeaders(),
       timeout: 45000,
     });
     const result = response.data;
     if (!result || result.ok !== true || !Number.isSafeInteger(Number(result.comprobanteId)) ||
-        Number(result.comprobanteId) <= 0 || !result.serie || !Number.isSafeInteger(Number(result.correlativo))) {
-      throw new Error('Supabase no devolvió una confirmación completa de la venta. El carrito se conserva para reintentar con la misma clave.');
+        Number(result.comprobanteId) <= 0 || !result.serie || !Number.isSafeInteger(Number(result.correlativo)) ||
+        result.trazabilidadFEFO !== true) {
+      throw new Error('Supabase no confirmó la venta con su trazabilidad de lotes. El carrito se conserva para reintentar con la misma clave.');
     }
     return {
       ok: true,
-      decision: String(result.decision || ''),
+      decision: String(result.decision || 'SALE_CONFIRMED'),
       comprobanteId: Number(result.comprobanteId),
       tipo: result.tipo == null ? undefined : String(result.tipo),
       serie: String(result.serie),
@@ -142,6 +143,9 @@ export async function crearVentaSupabase(payload: SupabaseSalePayload): Promise<
     const status = error?.response?.status;
     const message = error?.response?.data?.message || error?.response?.data?.details ||
       error?.response?.data?.hint || error?.response?.data?.error_description;
+    if (error?.response?.data?.error === 'INVENTORY_COUNT_OPEN' || String(message || '').includes('INVENTORY_COUNT_OPEN')) {
+      throw new Error('Hay un inventario físico abierto en esta sucursal. Cierra el conteo antes de cobrar; el carrito y la misma clave de operación se conservan.');
+    }
     if (status === 401) throw new Error('La sesión Supabase expiró. Inicia sesión nuevamente; conserva el carrito.');
     if (status === 403) throw new Error('La RPC de ventas no está habilitada en Cloudflare. No se registró una venta por otra vía.');
     if (status === 404 || status === 409) throw new Error('La función transaccional de ventas aún no está instalada en el entorno Supabase de pruebas.');
@@ -160,7 +164,7 @@ export async function crearVentaSupabase(payload: SupabaseSalePayload): Promise<
         throw new Error('La consulta de recuperación aún no está instalada en Supabase. Conserva el carrito y reintenta con la misma clave.');
       }
     }
-    if (error instanceof Error && !error.isAxiosError && !error.response) throw error;
+    if (error instanceof Error && !('isAxiosError' in error) && !('response' in error)) throw error;
     throw new Error('No se pudo confirmar el resultado del cobro. La consulta no encontró un comprobante confirmado; la solicitud podría seguir en curso. Conserva el carrito y reintenta con la misma clave.');
   }
 }

@@ -1,0 +1,82 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const sql=fs.readFileSync('supabase/migrations-preview/202611090002_inventory_lots_returns_compat.sql','utf8');
+
+test('FEFO preview is additive and guarded by singular-model prerequisites',()=>{
+  assert.match(sql,/INVENTORY_LOTS_PREREQUISITES_MISSING/);
+  assert.match(sql,/ADD COLUMN IF NOT EXISTS variante_id integer/);
+  assert.match(sql,/CREATE TABLE IF NOT EXISTS public\.inventario_lote/);
+  assert.match(sql,/CREATE TABLE IF NOT EXISTS public\.comprobante_lote_salida/);
+  assert.match(sql,/CREATE TABLE IF NOT EXISTS public\.devolucion_venta_lote/);
+  assert.match(sql,/ADD COLUMN IF NOT EXISTS producto_id integer/);
+});
+
+test('pre-existing historical lot tables receive missing variant columns and foreign keys',()=>{
+  assert.match(sql,/ALTER TABLE public\.inventario_lote[\\s\\S]*ADD COLUMN IF NOT EXISTS variante_id integer/);
+  assert.match(sql,/ALTER TABLE public\.comprobante_lote_salida[\\s\\S]*ADD COLUMN IF NOT EXISTS variante_id integer/);
+  assert.match(sql,/ADD CONSTRAINT fk_lote_variante[\\s\\S]*FOREIGN KEY \(variante_id\) REFERENCES public\.producto_variante\(id\)/);
+  assert.match(sql,/ADD CONSTRAINT fk_lote_salida_variante[\\s\\S]*FOREIGN KEY \(variante_id\) REFERENCES public\.producto_variante\(id\)/);
+});
+
+test('lot exits retain exact comprobante line identity for repeated products',()=>{
+  assert.match(sql,/comprobante_linea_id integer/);
+  assert.match(sql,/fk_lote_salida_comprobante_linea/);
+  assert.ok(sql.includes('REFERENCES public.comprobante_linea(id)'));
+  assert.match(sql,/idx_lote_salida_comprobante_linea/);
+});
+
+test('variant stock product link is backfilled and checked before use',()=>{
+  assert.match(sql,/SET producto_id=pv\.producto_id/);
+  assert.match(sql,/INVENTORY_VARIANT_STOCK_PRODUCT_LINK_MISSING/);
+  assert.match(sql,/fk_variante_stock_producto/);
+});
+
+test('opening lots preserve existing base and variant balances without changing stock totals',()=>{
+  assert.match(sql,/FROM public\.producto_stock ps/);
+  assert.match(sql,/FROM public\.producto_variante_stock vs/);
+  assert.match(sql,/APERTURA-VAR-/);
+  assert.match(sql,/NOT EXISTS \(/);
+  assert.doesNotMatch(sql,/UPDATE public\.producto_stock\s+SET stock/i);
+  assert.doesNotMatch(sql,/UPDATE public\.producto_variante_stock\s+SET stock/i);
+});
+
+test('lot tables are not directly writable by client roles',()=>{
+  assert.match(sql,/ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql,/REVOKE ALL ON public\.inventario_lote,public\.comprobante_lote_salida,public\.devolucion_venta_lote FROM PUBLIC,anon,authenticated/);
+});
+
+test('migration is transaction-wrapped and does not seed sales or returns',()=>{
+  assert.match(sql,/^BEGIN;/);
+  assert.match(sql,/COMMIT;\s*$/);
+  assert.doesNotMatch(sql,/INSERT INTO public\.(comprobante_lote_salida|devolucion_venta_lote)/i);
+});
+
+test('purchase lines use line identity to allow multiple lots for the same product and variant',()=>{
+  assert.match(sql,/DROP CONSTRAINT IF EXISTS uq_compra_linea_producto/);
+  assert.match(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_numero/);
+  assert.doesNotMatch(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante/);
+});
+
+test('purchase header credit due date exists separately from lot expiration',()=>{
+  assert.match(sql,/to_regclass\('public\.compra'\) IS NULL/);
+  assert.match(sql,/ALTER TABLE public\.compra\s+ADD COLUMN IF NOT EXISTS fecha_vencimiento date/);
+  assert.match(sql,/fecha_vencimiento date/);
+});
+
+test('purchase schema supports payload fingerprints and repeated product variants across distinct lots',()=>{
+  assert.match(sql,/ADD COLUMN IF NOT EXISTS request_hash text/);
+  assert.match(sql,/DROP INDEX IF EXISTS public\.uq_compra_linea_producto_variante/);
+  assert.match(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_numero/);
+  assert.doesNotMatch(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante/);
+});
+
+test('FEFO migration fails early unless historical lot tables and receivables exist',()=>{
+  const guard=sql.slice(sql.indexOf('DO $guard$'),sql.indexOf('END $guard$'));
+  for(const table of ['inventario_lote','comprobante_lote_salida','cuenta_cobrar']) {
+    assert.ok(guard.includes(`to_regclass('public.${table}') IS NULL`),`guard must require public.${table}`);
+  }
+  assert.match(guard,/1700000000007/);
+  assert.ok(guard.indexOf("to_regclass('public.inventario_lote')") < sql.indexOf('ALTER TABLE public.inventario_lote'));
+});

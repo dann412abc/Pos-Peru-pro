@@ -53,7 +53,7 @@ export interface Cliente {
 }
 
 // Tipos de comprobante SUNAT: 01 factura, 03 boleta, 07 nota crédito, 08 nota débito
-export type TipoComprobante = '01' | '03' | '07' | '08';
+export type TipoComprobante = '01' | '03' | 'NV' | '07' | '08';
 
 export type MetodoPago = 'EFECTIVO' | 'TARJETA' | 'YAPE' | 'PLIN' | 'CREDITO';
 

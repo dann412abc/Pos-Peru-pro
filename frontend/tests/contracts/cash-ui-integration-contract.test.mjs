@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const page = await readFile(new URL('../../../src/pages/CierreCaja.tsx', import.meta.url), 'utf8');
-const helper = await readFile(new URL('../../../src/api/supabaseCash.ts', import.meta.url), 'utf8');
-const client = await readFile(new URL('../../../src/api/client.ts', import.meta.url), 'utf8');
+const page = await readFile(new URL('../../src/pages/CierreCaja.tsx', import.meta.url), 'utf8');
+const helper = await readFile(new URL('../../src/api/supabaseCash.ts', import.meta.url), 'utf8');
+const client = await readFile(new URL('../../src/api/client.ts', import.meta.url), 'utf8');
 
 test('CierreCaja selecciona el flujo Supabase sin retirar el flujo legado', () => {
   assert.match(page, /ES_SUPABASE_AUTH/);

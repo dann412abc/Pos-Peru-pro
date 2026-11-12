@@ -17,12 +17,21 @@ const payload = {
 };
 
 describe('adaptador de ventas Supabase', () => {
-  beforeEach(() => { post.mockReset(); localStorage.clear(); });
+  beforeEach(() => {
+    post.mockReset();
+    const values = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, String(value)); },
+      removeItem: (key: string) => { values.delete(key); },
+      clear: () => values.clear(),
+    });
+  });
 
   it('llama exclusivamente a la RPC autenticada con p_payload', async () => {
-    post.mockResolvedValue({ data: { ok: true, decision: 'CREATED', comprobanteId: 90, serie: 'B001', correlativo: 5, total: 10 } });
+    post.mockResolvedValue({ data: { ok: true, decision: 'CREATED', comprobanteId: 90, serie: 'B001', correlativo: 5, total: 10, trazabilidadFEFO: true } });
     const result = await crearVentaSupabase(payload);
-    expect(post).toHaveBeenCalledWith('/api/edge/rpc/pos_venta_crear_auth', { p_payload: payload }, expect.objectContaining({
+    expect(post).toHaveBeenCalledWith('/api/edge/sales/register', { payload }, expect.objectContaining({
       headers: { Authorization: 'Bearer valid-supabase-jwt' },
       timeout: 45000,
     }));
@@ -32,7 +41,7 @@ describe('adaptador de ventas Supabase', () => {
 
   it('rechaza respuesta sin confirmación completa', async () => {
     post.mockResolvedValue({ data: { ok: true, comprobanteId: 90 } });
-    await expect(crearVentaSupabase(payload)).rejects.toThrow(/confirmación completa/);
+    await expect(crearVentaSupabase(payload)).rejects.toThrow(/trazabilidad de lotes/);
   });
 
   it('no llama a red si falta cliente remoto o la clave', async () => {
@@ -52,7 +61,7 @@ describe('adaptador de ventas Supabase', () => {
       .mockResolvedValueOnce({ data: {
         ok: true, existente: true, decision: 'SALE_CONFIRMED',
         comprobanteId: 91, tipo: '03', serie: 'B001', correlativo: 6,
-        total: 10, pagos: [{ metodo: 'YAPE', monto: 10 }],
+        total: 10, trazabilidadFEFO: true, pagos: [{ metodo: 'YAPE', monto: 10 }],
       } });
     const result = await crearVentaSupabase(payload);
     expect(post).toHaveBeenCalledTimes(2);

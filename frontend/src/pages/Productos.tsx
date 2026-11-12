@@ -8,6 +8,7 @@ import Modal from '../components/ui/Modal';
 import type { Producto, TipoIgv } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { fetchCurrentSupabaseCatalog, mapSupabaseProductRows, mutateSupabaseCatalog, mutateSupabaseVariant } from '../api/supabaseCatalog';
+import { registrarAjusteInventarioSupabase, transferirInventarioSupabase } from '../api/supabaseInventory';
 
 type Variante = {
   id?: number; productoId?: number; codigo: string; codigoBarras?: string | null;
@@ -93,7 +94,9 @@ export default function Productos() {
   }
 
   async function recargarTransferencias() {
-    if (ES_MODO_DEMO || (usuario?.sucursales?.length || 0) < 2) {
+    // El historial Supabase se habilitará cuando exista su RPC de lectura autenticada.
+    // Evita consultar el endpoint REST heredado con sesiones Supabase.
+    if (ES_MODO_DEMO || import.meta.env.VITE_AUTH_PROVIDER === 'supabase' || (usuario?.sucursales?.length || 0) < 2) {
       setTransferencias([]);
       return;
     }
@@ -163,6 +166,7 @@ export default function Productos() {
         }
         const payload = {
           id: editando?.id,
+          sucursal_id: Number(usuario?.sucursalId),
           codigo: form.codigo.trim(),
           codigo_barras: form.tieneVariantes ? null : (form.codigoBarras?.trim() || null),
           tiene_variantes: Boolean(form.tieneVariantes),
@@ -230,7 +234,14 @@ export default function Productos() {
       return;
     }
     try {
-      if (!ES_MODO_DEMO) {
+      if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
+        const sucursalId = Number(usuario?.sucursalId);
+        if (!Number.isSafeInteger(sucursalId) || sucursalId <= 0) throw new Error('No hay una sucursal activa válida');
+        await registrarAjusteInventarioSupabase({
+          sucursalId, productoId: productoAjuste.id, tipo: tipoAjuste, cantidad,
+          motivo: motivoAjuste.trim(), idempotencyKey: nuevaClaveTransferencia(),
+        });
+      } else if (!ES_MODO_DEMO) {
         const sucursalId = Number(usuario?.sucursalId);
         if (!Number.isInteger(sucursalId) || sucursalId <= 0) throw new Error('No hay una sucursal activa válida');
         await api.post('/inventario/movimientos', {
@@ -287,13 +298,23 @@ export default function Productos() {
       return;
     }
     try {
-      await api.post('/inventario/transferencias', {
-        sucursalOrigenId: Number(usuario.sucursalId),
-        sucursalDestinoId: Number(sucursalDestino),
-        lineas: [{ productoId: productoTransferencia.id, cantidad }],
-        motivo: motivoTransferencia.trim(),
-        idempotencyKey: claveTransferencia,
-      });
+      if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
+        await transferirInventarioSupabase({
+          sucursalOrigenId: Number(usuario.sucursalId),
+          sucursalDestinoId: Number(sucursalDestino),
+          lineas: [{ productoId: Number(productoTransferencia.id), cantidad }],
+          motivo: motivoTransferencia.trim(),
+          idempotencyKey: claveTransferencia,
+        });
+      } else {
+        await api.post('/inventario/transferencias', {
+          sucursalOrigenId: Number(usuario.sucursalId),
+          sucursalDestinoId: Number(sucursalDestino),
+          lineas: [{ productoId: productoTransferencia.id, cantidad }],
+          motivo: motivoTransferencia.trim(),
+          idempotencyKey: claveTransferencia,
+        });
+      }
       toast.success('Transferencia registrada. Se descontó el origen y se abonó el destino.');
       setProductoTransferencia(null);
       await recargar();
@@ -316,7 +337,18 @@ export default function Productos() {
     if(!destinoVariante || !Number.isFinite(cantidad) || cantidad<=0 || Math.round(cantidad*1000)!==cantidad*1000 || cantidad>Number(varianteTransferencia.stock||0)) { toast.error('Revise destino y cantidad disponible de la presentación'); return; }
     if(motivoVarianteTransferencia.trim().length<5){toast.error('Indique un motivo de al menos 5 caracteres');return;}
     try {
-      await api.post('/inventario/transferencias/variantes',{sucursalOrigenId:Number(usuario.sucursalId),sucursalDestinoId:Number(destinoVariante),varianteId:varianteTransferencia.id,cantidad,motivo:motivoVarianteTransferencia.trim(),idempotencyKey:claveVarianteTransferencia});
+      if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
+        if (!varianteTransferencia.productoId) throw new Error('No se pudo identificar el producto de la presentación.');
+        await transferirInventarioSupabase({
+          sucursalOrigenId: Number(usuario.sucursalId),
+          sucursalDestinoId: Number(destinoVariante),
+          lineas: [{ productoId: Number(varianteTransferencia.productoId), varianteId: Number(varianteTransferencia.id), cantidad }],
+          motivo: motivoVarianteTransferencia.trim(),
+          idempotencyKey: claveVarianteTransferencia,
+        });
+      } else {
+        await api.post('/inventario/transferencias/variantes',{sucursalOrigenId:Number(usuario.sucursalId),sucursalDestinoId:Number(destinoVariante),varianteId:varianteTransferencia.id,cantidad,motivo:motivoVarianteTransferencia.trim(),idempotencyKey:claveVarianteTransferencia});
+      }
       toast.success('Presentación transferida. Se conservaron sus lotes y costo.'); setVarianteTransferencia(null);
       if(productoVariantes) await abrirVariantes(productoVariantes); await recargarTransferencias();
     } catch(error:any){toast.error(error?.response?.data?.message||error?.message||'No se pudo transferir la presentación');}
@@ -376,6 +408,7 @@ export default function Productos() {
     try {
       const payload = {
         producto_id: productoVariantes.id,
+        sucursal_id: Number(usuario?.sucursalId),
         codigo: formVariante.codigo.trim(),
         codigoBarras: formVariante.codigoBarras?.trim() || undefined,
         nombre: formVariante.nombre.trim(),
@@ -440,10 +473,19 @@ export default function Productos() {
       toast.error('Explique el motivo con al menos 5 caracteres'); return;
     }
     try {
-      await api.post('/inventario/variantes/ajustes', {
-        varianteId: varianteAjuste.id, sucursalId: Number(usuario.sucursalId),
-        tipo: tipoAjusteVariante, cantidad, motivo: motivoAjusteVariante.trim(), idempotencyKey: claveAjusteVariante,
-      });
+      if (import.meta.env.VITE_AUTH_PROVIDER === 'supabase') {
+        if (!varianteAjuste.productoId) throw new Error('No se pudo identificar el producto de la presentación.');
+        await registrarAjusteInventarioSupabase({
+          varianteId: varianteAjuste.id, productoId: varianteAjuste.productoId,
+          sucursalId: Number(usuario.sucursalId), tipo: tipoAjusteVariante, cantidad,
+          motivo: motivoAjusteVariante.trim(), idempotencyKey: claveAjusteVariante,
+        });
+      } else {
+        await api.post('/inventario/variantes/ajustes', {
+          varianteId: varianteAjuste.id, sucursalId: Number(usuario.sucursalId),
+          tipo: tipoAjusteVariante, cantidad, motivo: motivoAjusteVariante.trim(), idempotencyKey: claveAjusteVariante,
+        });
+      }
       toast.success('Movimiento de variante registrado');
       setVarianteAjuste(null);
       if (productoVariantes) await abrirVariantes(productoVariantes);

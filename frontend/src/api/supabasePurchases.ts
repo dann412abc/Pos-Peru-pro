@@ -13,6 +13,15 @@ export type SupabasePurchasePayload = {
     monto: number; cajaId?: number; referencia?: string }>;
 };
 
+function rethrowInventoryCountConflict(error: any): void {
+  const data = error?.response?.data;
+  const message = [data?.message, data?.details, data?.hint, data?.error, data?.error_description]
+    .filter(value => typeof value === 'string').join(' ');
+  if (data?.error === 'INVENTORY_COUNT_OPEN' || message.includes('INVENTORY_COUNT_OPEN')) {
+    throw new Error('Hay un inventario físico abierto en esta sucursal. Cierra el conteo antes de recibir o devolver compras; conserva la misma clave para reintentar.');
+  }
+}
+
 function authHeaders() {
   const token = getAccessToken();
   if (!token || token.startsWith('demo-')) throw new Error('Inicia sesión con Supabase para consultar compras.');
@@ -59,7 +68,8 @@ export async function fetchSupabasePurchaseDetail(sucursalId: number, compraId: 
 export async function recibirCompraSupabase(payload: SupabasePurchasePayload): Promise<Record<string, unknown>> {
   const headers = authHeaders();
   if (!payload || !Array.isArray(payload.lineas) || !payload.lineas.length || !payload.idempotencyKey) throw new Error('La compra no cumple los datos mínimos para su recepción.');
-  const response = await axios.post('/api/edge/purchases/receive', { payload }, { headers, timeout: 30000 });
+  let response;
+  try { response = await axios.post('/api/edge/purchases/receive', { payload }, { headers, timeout: 30000 }); } catch (error) { rethrowInventoryCountConflict(error); throw error; }
   if (!response.data || typeof response.data !== 'object') throw new Error('Supabase devolvió una respuesta de compra inválida.');
   return response.data;
 }
@@ -100,7 +110,8 @@ export async function registrarDevolucionProveedorSupabase(payload: {
       !payload.idempotencyKey || !payload.lineas?.length || payload.lineas.some(x => !Number.isSafeInteger(x.compraLineaId) || x.compraLineaId <= 0 || !Number.isFinite(x.cantidad) || x.cantidad <= 0)) {
     throw new Error('Los datos de la devolución no son válidos.');
   }
-  const response = await axios.post('/api/edge/purchases/return', { payload }, { headers, timeout: 30000 });
+  let response;
+  try { response = await axios.post('/api/edge/purchases/return', { payload }, { headers, timeout: 30000 }); } catch (error) { rethrowInventoryCountConflict(error); throw error; }
   if (!response.data || typeof response.data !== 'object' || !response.data.devolucionId) throw new Error('Supabase no confirmó la devolución.');
   return response.data;
 }
@@ -111,7 +122,8 @@ export async function anularCompraSupabase(payload: { compraId: number; motivo: 
   if (!Number.isSafeInteger(payload.compraId) || payload.compraId <= 0 || payload.motivo.trim().length < 5 || payload.motivo.length > 500) {
     throw new Error('La compra o el motivo de anulación no son válidos.');
   }
-  const response = await axios.post('/api/edge/purchases/cancel', { payload }, { headers, timeout: 30000 });
+  let response;
+  try { response = await axios.post('/api/edge/purchases/cancel', { payload }, { headers, timeout: 30000 }); } catch (error) { rethrowInventoryCountConflict(error); throw error; }
   if (!response.data || response.data.estado !== 'ANULADA') throw new Error('Supabase no confirmó la anulación de la compra.');
   return response.data;
 }

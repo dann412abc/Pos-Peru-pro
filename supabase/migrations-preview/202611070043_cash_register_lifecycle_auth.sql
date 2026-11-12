@@ -44,12 +44,23 @@ BEGIN
  IF NOT FOUND OR v_estado<>'ABIERTA' THEN RAISE EXCEPTION 'CASH_NOT_OPEN_OR_FORBIDDEN' USING ERRCODE='42501'; END IF;
  IF p_tipo='SALIDA' AND p_metodo='EFECTIVO' THEN
   SELECT round(c.saldo_inicial + COALESCE((
-    SELECT SUM(cp.monto) FROM public.comprobante_pago cp JOIN public.comprobante co ON co.id=cp.comprobante_id
-    WHERE co.caja_id=c.id AND cp.metodo_pago='EFECTIVO' AND co.estado<>'ANULADA'
+    SELECT SUM(cobro.monto) FROM (
+      SELECT cp.metodo_pago,cp.monto FROM public.comprobante_pago cp
+      JOIN public.comprobante co ON co.id=cp.comprobante_id
+      WHERE co.caja_id=c.id AND co.empresa_id=v_empresa AND co.estado<>'ANULADA'
+      UNION ALL
+      SELECT co.metodo_pago,co.total FROM public.comprobante co
+      WHERE co.caja_id=c.id AND co.empresa_id=v_empresa AND co.estado<>'ANULADA'
+        AND NOT EXISTS(SELECT 1 FROM public.comprobante_pago cp WHERE cp.comprobante_id=co.id)
+    ) cobro WHERE cobro.metodo_pago='EFECTIVO'
   ),0) + COALESCE((
     SELECT SUM(CASE WHEN cm.tipo='INGRESO' THEN cm.monto ELSE -cm.monto END)
-    FROM public.caja_movimiento cm WHERE cm.caja_id=c.id AND cm.metodo_pago='EFECTIVO'
-  ),0),2) INTO v_disponible FROM public.caja c WHERE c.id=p_caja_id;
+    FROM public.caja_movimiento cm WHERE cm.caja_id=c.id AND cm.usuario_id=v_usuario AND cm.metodo_pago='EFECTIVO' AND cm.devolucion_venta_id IS NULL
+  ),0) - COALESCE((
+    SELECT SUM(dp.monto) FROM public.devolucion_venta_pago dp
+    JOIN public.devolucion_venta d ON d.id=dp.devolucion_id AND d.empresa_id=dp.empresa_id
+    WHERE d.caja_id=c.id AND d.empresa_id=v_empresa AND d.estado='REGISTRADA' AND dp.metodo_pago='EFECTIVO'
+  ),0),2) INTO v_disponible FROM public.caja c WHERE c.id=p_caja_id AND c.usuario_id=v_usuario;
   IF p_monto>v_disponible THEN RAISE EXCEPTION 'CASH_INSUFFICIENT_FUNDS' USING ERRCODE='22023'; END IF;
  END IF;
  INSERT INTO public.caja_movimiento(caja_id,usuario_id,tipo,metodo_pago,monto,motivo)
@@ -64,7 +75,8 @@ SET search_path=pg_catalog,public,auth
 AS $fn$
 DECLARE v_auth uuid:=auth.uid(); v_usuario integer; v_empresa integer; v_caja public.caja%ROWTYPE;
  v_efectivo numeric(12,2); v_tarjeta numeric(12,2); v_yape numeric(12,2); v_plin numeric(12,2); v_credito numeric(12,2);
- v_mov_efectivo numeric(12,2); v_mov_tarjeta numeric(12,2); v_mov_yape numeric(12,2); v_mov_plin numeric(12,2); v_esperado numeric(12,2); v_diferencia numeric(12,2); v_esperado_metodos jsonb;
+ v_mov_efectivo numeric(12,2); v_mov_tarjeta numeric(12,2); v_mov_yape numeric(12,2); v_mov_plin numeric(12,2);
+ v_dev_efectivo numeric(12,2); v_dev_tarjeta numeric(12,2); v_dev_yape numeric(12,2); v_dev_plin numeric(12,2); v_esperado numeric(12,2); v_diferencia numeric(12,2); v_esperado_metodos jsonb;
  v_linea jsonb; v_metodo text; v_contado numeric(12,2); v_arqueo_final jsonb:='[]'::jsonb;
 BEGIN
  IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
@@ -97,14 +109,24 @@ BEGIN
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='YAPE'),0),
   COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE -monto END) FILTER(WHERE metodo_pago='PLIN'),0)
  INTO v_mov_efectivo,v_mov_tarjeta,v_mov_yape,v_mov_plin
- FROM public.caja_movimiento WHERE caja_id=p_caja_id;
- v_esperado:=round(COALESCE(v_caja.saldo_inicial,0)+v_efectivo+v_mov_efectivo,2);
+ FROM public.caja_movimiento WHERE caja_id=p_caja_id AND devolucion_venta_id IS NULL;
+ -- Los reembolsos también generan caja_movimiento; se excluyen aquí porque ya se netean desde devolucion_venta_pago.
+ SELECT
+  COALESCE(SUM(dp.monto) FILTER(WHERE dp.metodo_pago='EFECTIVO'),0),
+  COALESCE(SUM(dp.monto) FILTER(WHERE dp.metodo_pago='TARJETA'),0),
+  COALESCE(SUM(dp.monto) FILTER(WHERE dp.metodo_pago='YAPE'),0),
+  COALESCE(SUM(dp.monto) FILTER(WHERE dp.metodo_pago='PLIN'),0)
+ INTO v_dev_efectivo,v_dev_tarjeta,v_dev_yape,v_dev_plin
+ FROM public.devolucion_venta_pago dp
+ JOIN public.devolucion_venta d ON d.id=dp.devolucion_id AND d.empresa_id=dp.empresa_id
+ WHERE d.caja_id=p_caja_id AND d.empresa_id=v_empresa AND d.estado='REGISTRADA';
+ v_esperado:=round(COALESCE(v_caja.saldo_inicial,0)+v_efectivo+v_mov_efectivo-COALESCE(v_dev_efectivo,0),2);
  v_diferencia:=round(p_efectivo_contado-v_esperado,2);
  v_esperado_metodos:=jsonb_build_object(
   'EFECTIVO',v_esperado,
-  'TARJETA',round(v_tarjeta+v_mov_tarjeta,2),
-  'YAPE',round(v_yape+v_mov_yape,2),
-  'PLIN',round(v_plin+v_mov_plin,2),
+  'TARJETA',round(v_tarjeta+v_mov_tarjeta-COALESCE(v_dev_tarjeta,0),2),
+  'YAPE',round(v_yape+v_mov_yape-COALESCE(v_dev_yape,0),2),
+  'PLIN',round(v_plin+v_mov_plin-COALESCE(v_dev_plin,0),2),
   'CREDITO',v_credito
  );
  FOREACH v_metodo IN ARRAY ARRAY['EFECTIVO','TARJETA','YAPE','PLIN'] LOOP

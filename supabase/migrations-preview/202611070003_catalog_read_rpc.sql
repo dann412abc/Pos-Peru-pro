@@ -2,6 +2,12 @@
 -- Requiere las migraciones POS existentes, incluida producto_stock y producto_variante.
 -- Función de solo lectura; la empresa y el usuario se obtienen exclusivamente de auth.uid().
 BEGIN;
+
+-- Compatibilidad con el esquema POS AYNI PERÚ comprobado en staging.
+ALTER TABLE public.cliente ADD COLUMN IF NOT EXISTS activo boolean NOT NULL DEFAULT TRUE;
+ALTER TABLE public.producto ADD COLUMN IF NOT EXISTS codigo_barras varchar(80);
+ALTER TABLE public.producto ADD COLUMN IF NOT EXISTS tiene_variantes boolean NOT NULL DEFAULT FALSE;
+ALTER TABLE public.producto_variante ADD COLUMN IF NOT EXISTS codigo_barras varchar(80);
 CREATE OR REPLACE FUNCTION public.pos_catalogo_base_auth(p_sucursal_id integer DEFAULT NULL)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -69,7 +75,7 @@ BEGIN
       WHERE ps.empresa_id = v_empresa_id AND ps.sucursal_id = v_sucursal_id
     ), '[]'::jsonb),
     'stock_variantes', COALESCE((
-      SELECT jsonb_agg(to_jsonb(vs) ORDER BY vs.producto_id, vs.variante_id)
+      SELECT jsonb_agg(to_jsonb(vs) ORDER BY vs.variante_id)
       FROM public.producto_variante_stock vs
       WHERE vs.empresa_id = v_empresa_id AND vs.sucursal_id = v_sucursal_id
     ), '[]'::jsonb),
