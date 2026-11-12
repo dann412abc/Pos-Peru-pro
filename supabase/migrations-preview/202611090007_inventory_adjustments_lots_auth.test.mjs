@@ -41,3 +41,9 @@ test('outbound adjustment refuses stock-lot mismatch and rolls back atomically',
   assert.match(sql,/cantidad_disponible=cantidad_disponible-v_tomar/);
   assert.match(sql,/GRANT EXECUTE ON FUNCTION public\.pos_inventario_ajustar_lote_auth\(jsonb\) TO authenticated/);
 });
+
+test('variant IDs use the historical INTEGER schema type',()=>{
+  assert.match(sql,/v_variante_id integer;/);
+  assert.match(sql,/NULLIF\(p_payload->>'varianteId',''\)::integer/);
+  assert.doesNotMatch(sql,/v_variante_id bigint|varianteId',''\)::bigint/);
+});
