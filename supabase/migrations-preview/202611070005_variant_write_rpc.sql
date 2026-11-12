@@ -6,7 +6,7 @@ DECLARE v_auth uuid := auth.uid(); v_user integer; v_empresa integer; v_producto
         v_codigo text; v_barras text; v_nombre text; v_precio numeric; v_mayoreo numeric; v_result jsonb;
 BEGIN
   IF v_auth IS NULL THEN RAISE EXCEPTION 'Sesión no autenticada' USING ERRCODE='28000'; END IF;
-  SELECT id, empresa_id, upper(rol) INTO v_user, v_empresa, v_rol FROM public.usuario WHERE auth_user_id=v_auth AND activo=TRUE;
+  SELECT id, empresa_id, upper(rol) INTO v_user, v_empresa, v_rol FROM public.usuario WHERE supabase_auth_user_id=v_auth AND activo=TRUE;
   IF v_user IS NULL OR v_rol <> 'ADMIN' THEN RAISE EXCEPTION 'Usuario POS no vinculado, inactivo o sin rol administrador' USING ERRCODE='42501'; END IF;
   IF jsonb_typeof(p_payload) <> 'object' THEN RAISE EXCEPTION 'Payload inválido' USING ERRCODE='22023'; END IF;
   v_producto := NULLIF(p_payload->>'producto_id','')::integer;
