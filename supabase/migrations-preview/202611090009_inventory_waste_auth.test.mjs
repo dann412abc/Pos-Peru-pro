@@ -30,3 +30,10 @@ test('cliente y pantalla usan Supabase y conservan la clave para reintentos', ()
   assert.match(page, /registrarMermaSupabase/);
   assert.match(page, /setMermaKey\(crypto\.randomUUID\(\)\)/);
 });
+
+test('merma variant references use INTEGER and SQL grants are separated by real newlines',()=>{
+  assert.match(migration,/variante_id integer,/);
+  assert.match(migration,/v_variante integer;/);
+  assert.match(migration,/NULLIF\(p_payload->>'varianteId',''\)::integer/);
+  assert.doesNotMatch(migration,/\\\\nGRANT/);
+});
