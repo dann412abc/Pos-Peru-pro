@@ -53,14 +53,10 @@ test('migration is transaction-wrapped and does not seed sales or returns',()=>{
   assert.doesNotMatch(sql,/INSERT INTO public\.(comprobante_lote_salida|devolucion_venta_lote)/i);
 });
 
-test('purchase lines support distinct variants but prevent duplicate product/variant pairs',()=>{
-  const dropConstraint=sql.indexOf('DROP CONSTRAINT IF EXISTS uq_compra_linea_producto');
-  const dropIndex=sql.indexOf('DROP INDEX IF EXISTS public.uq_compra_linea_producto');
-  const createVariantIndex=sql.indexOf('CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante');
-  assert.ok(dropConstraint>=0 && dropIndex>dropConstraint && createVariantIndex>dropIndex,
-    'la constraint UNIQUE se elimina antes de su índice y del índice nuevo por variante');
-  assert.match(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante/);
-  assert.match(sql,/COALESCE\(variante_id,0\)/);
+test('purchase lines use line identity to allow multiple lots for the same product and variant',()=>{
+  assert.match(sql,/DROP CONSTRAINT IF EXISTS uq_compra_linea_producto/);
+  assert.match(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_numero/);
+  assert.doesNotMatch(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante/);
 });
 
 test('purchase header credit due date exists separately from lot expiration',()=>{
