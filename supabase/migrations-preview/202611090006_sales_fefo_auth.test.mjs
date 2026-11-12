@@ -51,3 +51,9 @@ test('read-only recovery RPC validates request hash and complete FEFO trace',()=
   assert.match(sql,/REVOKE ALL ON FUNCTION public\.pos_venta_idempotencia_consultar_auth\(jsonb\) FROM PUBLIC,anon/);
   assert.match(sql,/GRANT EXECUTE ON FUNCTION public\.pos_venta_idempotencia_consultar_auth\(jsonb\) TO authenticated/);
 });
+
+test('FEFO wrapper and recovery use the legacy sale RPC complete-payload MD5 fingerprint',()=>{
+  assert.equal((sql.match(/md5\(p_(?:venta|payload)::text\)/g)||[]).length,2);
+  assert.doesNotMatch(sql,/sha256\(convert_to/);
+  assert.match(sql,/MD5 of the complete JSON payload, including idempotencyKey/);
+});
