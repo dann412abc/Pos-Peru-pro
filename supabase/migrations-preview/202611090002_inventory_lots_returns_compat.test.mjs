@@ -71,3 +71,12 @@ test('purchase schema supports payload fingerprints and repeated product variant
   assert.match(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_numero/);
   assert.doesNotMatch(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante/);
 });
+
+test('FEFO migration fails early unless historical lot tables and receivables exist',()=>{
+  const guard=sql.slice(sql.indexOf('DO $guard$'),sql.indexOf('END $guard$'));
+  for(const table of ['inventario_lote','comprobante_lote_salida','cuenta_cobrar']) {
+    assert.ok(guard.includes(`to_regclass('public.${table}') IS NULL`),`guard must require public.${table}`);
+  }
+  assert.match(guard,/1700000000007/);
+  assert.ok(guard.indexOf("to_regclass('public.inventario_lote')") < sql.indexOf('ALTER TABLE public.inventario_lote'));
+});
