@@ -96,11 +96,14 @@ BEGIN
     IF EXISTS (
       SELECT 1 FROM public.comprobante_linea cl
       WHERE cl.comprobante_id=v_existente.id
-        AND NOT EXISTS (
-          SELECT 1 FROM public.comprobante_lote_salida cls
-          WHERE cls.comprobante_linea_id=cl.id
-            AND cls.empresa_id=v_empresa
-        )
+        AND COALESCE((
+        SELECT sum(cls.cantidad)
+        FROM public.comprobante_lote_salida cls
+        WHERE cls.comprobante_linea_id=cl.id
+          AND cls.empresa_id=v_empresa
+          AND cls.producto_id=cl.producto_id
+          AND cls.variante_id IS NOT DISTINCT FROM cl.variante_id
+      ),0) < cl.cantidad-0.0005
     ) THEN
       RAISE EXCEPTION 'SALE_LOT_TRACE_MISSING: historical sale requires controlled reconciliation'
         USING ERRCODE='23514';
@@ -257,11 +260,14 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM public.comprobante_linea cl
     WHERE cl.comprobante_id=v_sale.id
-      AND NOT EXISTS (
-        SELECT 1 FROM public.comprobante_lote_salida cls
+      AND COALESCE((
+        SELECT sum(cls.cantidad)
+        FROM public.comprobante_lote_salida cls
         WHERE cls.comprobante_linea_id=cl.id
           AND cls.empresa_id=v_empresa
-      )
+          AND cls.producto_id=cl.producto_id
+          AND cls.variante_id IS NOT DISTINCT FROM cl.variante_id
+      ),0) < cl.cantidad-0.0005
   ) THEN
     RETURN jsonb_build_object('ok',false,'existente',false,'decision','TRACE_INCOMPLETE');
   END IF;
