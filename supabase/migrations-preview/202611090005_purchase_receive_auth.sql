@@ -115,8 +115,8 @@ BEGIN
  END IF;
 
  -- First pass validates catalog, variant, stock row and IGV; computes tax totals.
- FOR line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') ORDER BY (value->>'productoId')::integer, NULLIF(value->>'varianteId','')::bigint NULLS FIRST LOOP
-  product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::bigint;
+ FOR line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') ORDER BY (value->>'productoId')::integer, NULLIF(value->>'varianteId','')::integer NULLS FIRST LOOP
+  product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::integer;
   packs:=(line->>'cantidad')::numeric; units_per_pack:=COALESCE(NULLIF(line->>'unidadesPorEmpaque','')::numeric,1);
   pack_cost:=COALESCE(NULLIF(line->>'costoEmpaque','')::numeric,(line->>'costoUnitario')::numeric*units_per_pack);
   expiry_date:=NULLIF(line->>'fechaVencimiento','')::date;
@@ -209,7 +209,7 @@ BEGIN
 
  -- Second pass creates purchase lines/lots, updates stock/cost average and records movement.
  FOR line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') LOOP
-  line_no:=line_no+1; product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::bigint;
+  line_no:=line_no+1; product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::integer;
   packs:=(line->>'cantidad')::numeric; units_per_pack:=COALESCE(NULLIF(line->>'unidadesPorEmpaque','')::numeric,1);
   pack_cost:=COALESCE(NULLIF(line->>'costoEmpaque','')::numeric,(line->>'costoUnitario')::numeric*units_per_pack);
   qty:=round(packs*units_per_pack,3); unit_cost:=round(pack_cost/units_per_pack,4);
