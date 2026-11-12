@@ -76,7 +76,17 @@ BEGIN
 END
 $variant_stock$;
 
--- Mantener el tipo de variante compatible con producto_variante.id (bigint).
+-- Las tablas de lotes y salidas ya existen en la migración histórica 0007.
+-- CREATE TABLE IF NOT EXISTS no agrega columnas a esas tablas; completar el esquema
+-- de forma aditiva para mantener compatibles los registros históricos.
+ALTER TABLE public.inventario_lote
+  ADD COLUMN IF NOT EXISTS variante_id integer;
+
+ALTER TABLE public.comprobante_lote_salida
+  ADD COLUMN IF NOT EXISTS variante_id integer,
+  ADD COLUMN IF NOT EXISTS comprobante_linea_id integer;
+
+-- Mantener el tipo de variante compatible con producto_variante.id (SERIAL/INTEGER).
 ALTER TABLE public.devolucion_venta_linea
   ADD COLUMN IF NOT EXISTS variante_id integer;
 ALTER TABLE public.movimiento_inventario
