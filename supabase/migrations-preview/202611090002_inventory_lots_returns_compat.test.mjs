@@ -55,3 +55,9 @@ test('purchase lines support distinct variants but prevent duplicate product/var
   assert.match(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante/);
   assert.match(sql,/COALESCE\(variante_id,0\)/);
 });
+
+test('purchase header credit due date exists separately from lot expiration',()=>{
+  assert.match(sql,/to_regclass\('public\.compra'\) IS NULL/);
+  assert.match(sql,/ALTER TABLE public\.compra\s+ADD COLUMN IF NOT EXISTS fecha_vencimiento date/);
+  assert.match(sql,/fecha_vencimiento date/);
+});
