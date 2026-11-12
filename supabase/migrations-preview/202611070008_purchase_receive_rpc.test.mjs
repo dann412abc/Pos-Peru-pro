@@ -20,3 +20,9 @@ test('purchase guards cover idempotency, IGV, cash/credit and branch ownership',
   assert.match(sql, /usuario_sucursal/);
   assert.match(sql, /saldo_pendiente/);
 });
+
+test('purchase receipt preserves bigint variant identifiers without narrowing casts', () => {
+  assert.match(sql, /v_variante bigint/);
+  assert.match(sql, /NULLIF\(v_line->>'varianteId',''\)::bigint/);
+  assert.doesNotMatch(sql, /NULLIF\(v_line->>'varianteId',''\)::integer/);
+});
