@@ -16,7 +16,7 @@ test('authenticated wrapper validates ADMIN and delegates legacy transactional a
 test('FEFO return traces original sale lots and prevents over-returning a lot',()=>{
   assert.match(sql,/public\.comprobante_lote_salida/);
   assert.match(sql,/public\.devolucion_venta_lote/);
-  assert.match(sql,/cls\.cantidad-COALESCE\(previo\.cantidad,0\)/);
+  assert.match(sql,/asign\.cantidad-COALESCE\(previo\.cantidad,0\)/);
   assert.match(sql,/dline\.comprobante_linea_id=v_linea_id/);
   assert.match(sql,/cls\.comprobante_linea_id=v_linea_id/);
   assert.match(sql,/SELECT COUNT\(\*\) INTO v_origen_count/);
