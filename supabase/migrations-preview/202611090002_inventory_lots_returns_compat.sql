@@ -12,8 +12,11 @@ BEGIN
      OR to_regclass('public.devolucion_venta_linea') IS NULL
      OR to_regclass('public.movimiento_inventario') IS NULL
      OR to_regclass('public.compra_linea') IS NULL
-     OR to_regclass('public.compra') IS NULL THEN
-    RAISE EXCEPTION 'INVENTORY_LOTS_PREREQUISITES_MISSING: faltan tablas base del modelo singular';
+     OR to_regclass('public.compra') IS NULL
+     OR to_regclass('public.inventario_lote') IS NULL
+     OR to_regclass('public.comprobante_lote_salida') IS NULL
+     OR to_regclass('public.cuenta_cobrar') IS NULL THEN
+    RAISE EXCEPTION 'INVENTORY_LOTS_PREREQUISITES_MISSING: ejecutar primero el esquema TypeORM base y la migración histórica 1700000000007; se requieren inventario_lote, comprobante_lote_salida y cuenta_cobrar';
   END IF;
 END
 $guard$;
