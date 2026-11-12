@@ -40,6 +40,7 @@ test('purchase receipt hash column and variant identifier match historical schem
   assert.match(sql, /ADD COLUMN IF NOT EXISTS payload_hash text/);
   assert.match(sql, /variant_id integer/);
   assert.doesNotMatch(sql, /variant_id bigint|::bigint/);
+  assert.doesNotMatch(sql, /NULLIF\(line->>'varianteId',''\)::bigint/);
 });
 
 test('purchase lines convert packs, enforce catalog IGV and calculate weighted cost', () => {
