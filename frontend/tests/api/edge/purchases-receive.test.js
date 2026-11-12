@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { onRequest } from './[[path]].js';
+import { onRequest } from '../../../functions/api/edge/[[path]].js';
 const env = { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'test-anon-key' };
 const params = { path: ['purchases', 'receive'] };
 const base = { sucursalId: 1, proveedorId: 2, tipoDocumento: '01', serie: 'F001', numero: '100', fechaDocumento: '2026-11-09', condicionPago: 'CONTADO', idempotencyKey: 'purchase-test-0001', lineas: [{ productoId: 3, cantidad: 1, unidadCompra: 'UNIDAD', unidadesPorEmpaque: 1, costoEmpaque: 10, costoUnitario: 10, tipoIgv: 10 }], pagos: [{ metodoPago: 'TRANSFERENCIA', monto: 11.8 }] };

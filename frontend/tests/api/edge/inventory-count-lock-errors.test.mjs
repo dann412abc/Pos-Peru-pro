@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { onRequest } from './[[path]].js';
+import { onRequest } from '../../../functions/api/edge/[[path]].js';
 
 const env = { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'public-anon' };
 const originalFetch = globalThis.fetch;

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { onRequest } from "./[[path]].js";
+import { onRequest } from "../../functions/api/[[path]].js";
 
 test("returns 503 when API_ORIGIN is not configured", async () => {
   const response = await onRequest({ request: new Request("https://pos.example.com/api/health"), env: {} });

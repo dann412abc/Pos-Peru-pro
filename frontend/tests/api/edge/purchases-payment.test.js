@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { onRequest } from './[[path]].js';
+import { onRequest } from '../../../functions/api/edge/[[path]].js';
 const env = { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'test-anon-key' };
 const params = { path: ['purchases', 'payment'] };
 const payload = { compraId: 12, monto: 25.5, metodoPago: 'YAPE', cajaId: 3, idempotencyKey: 'purchase-payment-123456' };

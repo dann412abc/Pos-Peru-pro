@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { onRequest } from './health.js';
+import { onRequest } from '../../functions/api/health.js';
 
 test('Pages health endpoint reports release and server-side configuration only', async () => {
   const response = await onRequest({ env: { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'public-key' } });

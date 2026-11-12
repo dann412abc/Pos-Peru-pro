@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { onRequest } from './[[path]].js';
+import { onRequest } from '../../../functions/api/edge/[[path]].js';
 
 function ctx(path, request, env = {}) { return { params: { path }, request, env }; }
 

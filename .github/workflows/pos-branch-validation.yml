@@ -67,7 +67,7 @@ jobs:
         run: node --test ../supabase/tests/pos-end-to-end-staging.contract.test.mjs ../supabase/tests/pos-end-to-end-transaction-staging.integration.test.mjs
       - name: Validate returns to cash UI integration
         working-directory: frontend
-        run: node --test functions/api/edge/returns-cash-ui-integration-contract.test.mjs
+        run: node --test tests/api/edge/returns-cash-ui-integration-contract.test.mjs
       - name: Run focused Edge routing smoke tests
         working-directory: frontend
         run: npm run test:edge-smoke

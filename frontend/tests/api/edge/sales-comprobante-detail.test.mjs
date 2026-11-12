@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { onRequest } from './[[path]].js';
+import { onRequest } from '../../../functions/api/edge/[[path]].js';
 const env = { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'anon-test' };
 const request = (body, authorization = 'Bearer user-jwt') => new Request('https://pos.example/api/edge/sales/comprobante-detail', {
   method: 'POST', headers: { authorization, 'content-type': 'application/json' }, body: JSON.stringify(body),
