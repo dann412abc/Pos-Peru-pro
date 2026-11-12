@@ -11,13 +11,18 @@ BEGIN
      OR to_regclass('public.comprobante_linea') IS NULL
      OR to_regclass('public.devolucion_venta_linea') IS NULL
      OR to_regclass('public.movimiento_inventario') IS NULL
-     OR to_regclass('public.compra_linea') IS NULL THEN
+     OR to_regclass('public.compra_linea') IS NULL
+     OR to_regclass('public.compra') IS NULL THEN
     RAISE EXCEPTION 'INVENTORY_LOTS_PREREQUISITES_MISSING: faltan tablas base del modelo singular';
   END IF;
 END
 $guard$;
 
 -- La recepción de compras y la devolución necesitan identificar variante y datos del lote.
+-- Fecha de vencimiento del crédito/documento de compra (no confundir con vencimiento del lote).
+ALTER TABLE public.compra
+  ADD COLUMN IF NOT EXISTS fecha_vencimiento date;
+
 ALTER TABLE public.compra_linea
   ADD COLUMN IF NOT EXISTS variante_id bigint,
   ADD COLUMN IF NOT EXISTS variante_nombre varchar(160),
