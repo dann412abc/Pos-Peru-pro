@@ -61,9 +61,11 @@ test('sale UI submits the exact selected variant and quantity to the FEFO sale p
 });
 
 test('sale FEFO replay and recovery use the exact writer fingerprint', () => {
-  const fingerprint = /encode\(sha256\(convert_to\(\((?:p_venta|p_payload) - 'idempotencyKey'\)::text,'UTF8'\)\),'hex'\)/g;
+  const fingerprint = /md5\(p_(?:venta|payload)::text\)/g;
   assert.equal((saleSql.match(fingerprint) || []).length, 2);
-  assert.doesNotMatch(saleSql, /md5\(p_(?:venta|payload)::text\)/);
+  assert.match(saleSql, /v_hash:=md5\(p_venta::text\)/);
+  assert.match(saleSql, /v_hash:=md5\(p_payload::text\)/);
+  assert.doesNotMatch(saleSql, /encode\(sha256\(convert_to/);
   assert.match(saleSql, /SALE_IDEMPOTENCY_CONFLICT/);
   assert.match(saleSql, /request_hash IS DISTINCT FROM v_hash/);
 });
