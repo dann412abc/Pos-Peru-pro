@@ -45,7 +45,7 @@ BEGIN
   END IF;
   -- Prevalidación y cálculo total. El costo unitario incluye IGV, como en el POS actual.
   FOR v_line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') LOOP
-    v_producto := (v_line->>'productoId')::integer; v_variante := NULLIF(v_line->>'varianteId','')::integer;
+    v_producto := (v_line->>'productoId')::integer; v_variante := NULLIF(v_line->>'varianteId','')::bigint;
     v_cantidad := (v_line->>'cantidad')::numeric; v_costo := (v_line->>'costoUnitario')::numeric;
     IF v_cantidad<=0 OR v_costo<=0 OR v_cantidad>999999999 OR v_costo>99999999 THEN RAISE EXCEPTION 'Cantidad o costo inválido' USING ERRCODE='22023'; END IF;
     SELECT p.tipo_igv,p.nombre INTO v_tipo_igv,v_producto_nombre FROM public.producto p WHERE p.id=v_producto AND p.empresa_id=v_empresa AND p.activo=true;
@@ -73,7 +73,7 @@ BEGIN
   RETURNING id INTO v_compra;
   v_idx:=0;
   FOR v_line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') LOOP
-    v_idx:=v_idx+1; v_producto:=(v_line->>'productoId')::integer; v_variante:=NULLIF(v_line->>'varianteId','')::integer;
+    v_idx:=v_idx+1; v_producto:=(v_line->>'productoId')::integer; v_variante:=NULLIF(v_line->>'varianteId','')::bigint;
     v_cantidad:=(v_line->>'cantidad')::numeric; v_costo:=(v_line->>'costoUnitario')::numeric;
     SELECT p.tipo_igv,p.nombre INTO v_tipo_igv,v_producto_nombre FROM public.producto p WHERE p.id=v_producto AND p.empresa_id=v_empresa FOR SHARE;
     v_subtotal:=round(v_cantidad*v_costo,2); v_base:=CASE WHEN v_tipo_igv=10 THEN round(v_subtotal/1.18,2) ELSE v_subtotal END; v_igv:=CASE WHEN v_tipo_igv=10 THEN round(v_subtotal-v_base,2) ELSE 0 END;
