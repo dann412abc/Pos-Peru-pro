@@ -43,7 +43,7 @@ DECLARE
   v_empresa_id integer := public.mi_empresa_id();
   v_sucursal_id integer;
   v_producto_id integer;
-  v_variante_id bigint;
+  v_variante_id integer;
   v_tipo text;
   v_cantidad numeric(12,3);
   v_motivo text;
@@ -74,7 +74,7 @@ BEGIN
 
   v_sucursal_id := (p_payload->>'sucursalId')::integer;
   v_producto_id := (p_payload->>'productoId')::integer;
-  v_variante_id := NULLIF(p_payload->>'varianteId','')::bigint;
+  v_variante_id := NULLIF(p_payload->>'varianteId','')::integer;
   v_tipo := upper(trim(coalesce(p_payload->>'tipo','')));
   v_cantidad := (p_payload->>'cantidad')::numeric;
   v_motivo := trim(coalesce(p_payload->>'motivo',''));
