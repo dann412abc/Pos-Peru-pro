@@ -94,6 +94,7 @@ test('purchase stock receipt preserves variant identity and creates lot trace fo
 });
 
 test('allows repeated product/variant lines when each line has a distinct lot identity', () => {
+  assert.ok(sql.includes('line_ordinal integer;'));
   assert.ok(sql.includes('FOR line,line_ordinal IN'));
   assert.ok(sql.includes('WITH ORDINALITY AS item(value,ordinality)'));
   assert.ok(sql.includes("THEN 'AUTO:'||line_ordinal::text"));

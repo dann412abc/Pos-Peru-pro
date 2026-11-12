@@ -27,7 +27,7 @@ DECLARE
  payment_sum numeric(14,2):=0; cash_out numeric(14,2):=0; cash_available numeric(14,2):=0;
  cash_ids integer[]:=ARRAY[]::integer[]; cash_id integer; cash_row record;
  stock_before numeric(12,3); avg_before numeric(12,4); stock_after numeric(12,3); avg_after numeric(12,4);
- purchase_id bigint; purchase_line_id bigint; line_no integer:=0; batch_code text; expiry_date date; unit_name text;
+ purchase_id bigint; purchase_line_id bigint; line_no integer:=0; line_ordinal integer; batch_code text; expiry_date date; unit_name text;
 BEGIN
  IF uid IS NULL THEN RAISE EXCEPTION 'AUTH_REQUIRED' USING ERRCODE='42501'; END IF;
  IF p_payload IS NULL OR jsonb_typeof(p_payload)<>'object' THEN RAISE EXCEPTION 'INVALID_PURCHASE_PAYLOAD' USING ERRCODE='22023'; END IF;
