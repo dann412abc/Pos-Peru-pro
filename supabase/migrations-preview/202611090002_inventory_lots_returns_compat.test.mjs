@@ -6,7 +6,7 @@ const sql=fs.readFileSync('supabase/migrations-preview/202611090002_inventory_lo
 
 test('FEFO preview is additive and guarded by singular-model prerequisites',()=>{
   assert.match(sql,/INVENTORY_LOTS_PREREQUISITES_MISSING/);
-  assert.match(sql,/ADD COLUMN IF NOT EXISTS variante_id bigint/);
+  assert.match(sql,/ADD COLUMN IF NOT EXISTS variante_id integer/);
   assert.match(sql,/CREATE TABLE IF NOT EXISTS public\.inventario_lote/);
   assert.match(sql,/CREATE TABLE IF NOT EXISTS public\.comprobante_lote_salida/);
   assert.match(sql,/CREATE TABLE IF NOT EXISTS public\.devolucion_venta_lote/);
