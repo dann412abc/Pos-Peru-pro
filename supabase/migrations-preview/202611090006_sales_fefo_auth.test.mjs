@@ -57,3 +57,10 @@ test('FEFO wrapper and recovery use the legacy sale RPC complete-payload MD5 fin
   assert.doesNotMatch(sql,/sha256\(convert_to/);
   assert.match(sql,/MD5 of the complete JSON payload, including idempotencyKey/);
 });
+
+test('replay and recovery require the full allocated quantity for each exact sale line',()=>{
+  assert.equal((sql.match(/sum\(cls\.cantidad\)/g)||[]).length,2);
+  assert.equal((sql.match(/cls\.producto_id=cl\.producto_id/g)||[]).length,2);
+  assert.equal((sql.match(/cls\.variante_id IS NOT DISTINCT FROM cl\.variante_id/g)||[]).length,2);
+  assert.equal((sql.match(/\),0\) < cl\.cantidad-0\.0005/g)||[]).length,2);
+});
