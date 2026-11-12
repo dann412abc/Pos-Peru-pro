@@ -21,7 +21,7 @@ test('return commit is idempotent and all stock, receivable and cash effects sha
 });
 test('cash ledger links refunds and cash summary subtracts refunds by method',()=>{
  assert.match(sql,/ADD COLUMN IF NOT EXISTS devolucion_venta_id bigint/);
- assert.match(sql,/FOREIGN KEY \(devolucion_venta_id,caja_id\)/);
+ assert.match(sql,/FOREIGN KEY \(devolucion_venta_id\)\s+REFERENCES public\.devolucion_venta\(id\)/);
  assert.match(sql,/'SALIDA'/);
  assert.match(cash,/devolucion_venta_pago/);
 });
@@ -77,6 +77,6 @@ test('compatibility migration supplies every stock and receivable timestamp/bala
  for(const marker of ['producto_stock','producto_variante_stock','cuenta_cobrar','monto_revertido','updated_at']) assert.ok(compat.includes(marker),marker);
 });
 test('cash refund foreign key references the unique return primary key, not a non-unique composite',()=>{
- assert.match(sql,/FOREIGN KEY \\(devolucion_venta_id\\)\\s+REFERENCES public\\.devolucion_venta\\(id\\)/);
+ assert.match(sql,/FOREIGN KEY \(devolucion_venta_id\)\s+REFERENCES public\.devolucion_venta\(id\)/);
  assert.doesNotMatch(sql,/REFERENCES public\\.devolucion_venta\\(id,caja_id\\)/);
 });
