@@ -21,7 +21,8 @@ $guard$;
 -- La recepción de compras y la devolución necesitan identificar variante y datos del lote.
 -- Fecha de vencimiento del crédito/documento de compra (no confundir con vencimiento del lote).
 ALTER TABLE public.compra
-  ADD COLUMN IF NOT EXISTS fecha_vencimiento date;
+  ADD COLUMN IF NOT EXISTS fecha_vencimiento date,
+  ADD COLUMN IF NOT EXISTS request_hash text;
 
 ALTER TABLE public.compra_linea
   ADD COLUMN IF NOT EXISTS variante_id bigint,
@@ -34,17 +35,15 @@ ALTER TABLE public.compra_linea
   ADD COLUMN IF NOT EXISTS codigo_lote varchar(80),
   ADD COLUMN IF NOT EXISTS fecha_vencimiento date;
 
--- Permitir varias variantes del mismo producto en una compra, sin duplicar la misma
--- combinación producto/variante. NULL representa el producto sin variante.
--- En el catálogo real de producción, uq_compra_linea_producto es una
--- constraint UNIQUE cuyo índice subyacente se elimina al quitar la constraint.
--- Primero se elimina la constraint; DROP INDEX queda como limpieza compatible
--- con instalaciones donde el objeto antiguo exista como índice independiente.
+-- Permitir varias líneas del mismo producto/variante cuando representan lotes distintos.
+-- La identidad única de cada renglón dentro de la compra es su número de línea.
+-- Retirar tanto la restricción histórica como el índice de producto/variante.
 ALTER TABLE public.compra_linea
   DROP CONSTRAINT IF EXISTS uq_compra_linea_producto;
 DROP INDEX IF EXISTS public.uq_compra_linea_producto;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante
-  ON public.compra_linea(compra_id,producto_id,COALESCE(variante_id,0));
+DROP INDEX IF EXISTS public.uq_compra_linea_producto_variante;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_numero
+  ON public.compra_linea(compra_id,numero_linea);
 
 ALTER TABLE public.producto_variante_stock
   ADD COLUMN IF NOT EXISTS producto_id integer,
