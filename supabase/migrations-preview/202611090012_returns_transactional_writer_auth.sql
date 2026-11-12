@@ -281,9 +281,9 @@ BEGIN
 
   INSERT INTO public.devolucion_venta
     (empresa_id,sucursal_id,comprobante_id,cliente_id,usuario_id,caja_id,motivo,
-     total_devolucion,credito_revertido,monto_reembolsado,idempotency_key,request_hash)
+     total_devolucion,credito_revertido,monto_reembolsado,estado,idempotency_key,request_hash)
   VALUES(v_empresa,v_venta.sucursal_id,p_comprobante_id,v_venta.cliente_id,v_usuario,
-    v_caja_id,v_motivo,v_total,v_credito,v_reembolso,v_key,v_hash)
+    v_caja_id,v_motivo,v_total,v_credito,v_reembolso,'REGISTRADA',v_key,v_hash)
   RETURNING id INTO v_devolucion_id;
 
   -- Escritura de líneas, stock y movimientos: cualquier error revierte toda la operación.
