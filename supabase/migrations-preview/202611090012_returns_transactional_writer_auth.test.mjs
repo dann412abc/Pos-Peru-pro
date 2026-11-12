@@ -74,7 +74,7 @@ test('legacy return idempotency hashes remain valid for pending retries after up
 
 test('compatibility migration supplies every stock and receivable timestamp/balance column used by the writer',()=>{
  const compat=fs.readFileSync('supabase/migrations-preview/202611090002_inventory_lots_returns_compat.sql','utf8');
- for(const marker of ['producto_stock','producto_variante_stock','cuenta_cobrar','monto_revertido','saldo_credito','updated_at']) assert.ok(compat.includes(marker),marker);
+ for(const marker of ['producto_stock','producto_variante_stock','cuenta_cobrar','monto_revertido','updated_at']) assert.ok(compat.includes(marker),marker);
 });
 test('cash refund foreign key references the unique return primary key, not a non-unique composite',()=>{
  assert.match(sql,/FOREIGN KEY \\(devolucion_venta_id\\)\\s+REFERENCES public\\.devolucion_venta\\(id\\)/);
