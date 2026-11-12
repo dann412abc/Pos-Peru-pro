@@ -40,6 +40,11 @@ BEGIN
     ('movimiento_inventario','comprobante_id'),('movimiento_inventario','usuario_id'),
     ('movimiento_inventario','tipo'),('movimiento_inventario','cantidad'),
     ('movimiento_inventario','stock_anterior'),('movimiento_inventario','stock_posterior'),('movimiento_inventario','motivo'),
+    ('producto_variante_movimiento','empresa_id'),('producto_variante_movimiento','sucursal_id'),
+    ('producto_variante_movimiento','variante_id'),('producto_variante_movimiento','usuario_id'),
+    ('producto_variante_movimiento','tipo'),('producto_variante_movimiento','cantidad'),
+    ('producto_variante_movimiento','motivo'),('producto_variante_movimiento','stock_anterior'),
+    ('producto_variante_movimiento','stock_posterior'),('producto_variante_movimiento','comprobante_id'),
     ('cuenta_cobrar','id'),('cuenta_cobrar','comprobante_id'),('cuenta_cobrar','empresa_id'),
     ('cuenta_cobrar','sucursal_id'),('cuenta_cobrar','saldo_pendiente'),('cuenta_cobrar','monto_revertido'),('cuenta_cobrar','estado'),('cuenta_cobrar','updated_at'),
     ('devolucion_venta','id'),('devolucion_venta','empresa_id'),('devolucion_venta','usuario_id'),
@@ -320,10 +325,17 @@ BEGIN
         WHERE variante_id=v_variante AND producto_id=v_original.producto_id
           AND sucursal_id=v_venta.sucursal_id AND empresa_id=v_empresa RETURNING stock INTO v_nuevo_stock;
       END IF;
-      INSERT INTO public.movimiento_inventario
-        (empresa_id,sucursal_id,producto_id,variante_id,comprobante_id,usuario_id,tipo,cantidad,stock_anterior,stock_posterior,motivo)
-      VALUES(v_empresa,v_venta.sucursal_id,v_original.producto_id,v_variante,p_comprobante_id,
-        v_usuario,'ENTRADA',v_cantidad,v_stock,v_nuevo_stock,'Devolución #'||v_devolucion_id||': '||left(v_motivo,150));
+      IF v_variante IS NULL THEN
+        INSERT INTO public.movimiento_inventario
+          (empresa_id,sucursal_id,producto_id,comprobante_id,usuario_id,tipo,cantidad,stock_anterior,stock_posterior,motivo)
+        VALUES(v_empresa,v_venta.sucursal_id,v_original.producto_id,p_comprobante_id,
+          v_usuario,'ENTRADA',v_cantidad,v_stock,v_nuevo_stock,'Devolución #'||v_devolucion_id||': '||left(v_motivo,150));
+      ELSE
+        INSERT INTO public.producto_variante_movimiento
+          (empresa_id,sucursal_id,variante_id,usuario_id,tipo,cantidad,motivo,stock_anterior,stock_posterior,comprobante_id)
+        VALUES(v_empresa,v_venta.sucursal_id,v_variante,v_usuario,'ENTRADA',v_cantidad,
+          'Devolución #'||v_devolucion_id||': '||left(v_motivo,150),v_stock,v_nuevo_stock,p_comprobante_id);
+      END IF;
     END IF;
   END LOOP;
 
