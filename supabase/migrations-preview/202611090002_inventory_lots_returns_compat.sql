@@ -22,7 +22,8 @@ $guard$;
 -- Fecha de vencimiento del crédito/documento de compra (no confundir con vencimiento del lote).
 ALTER TABLE public.compra
   ADD COLUMN IF NOT EXISTS fecha_vencimiento date,
-  ADD COLUMN IF NOT EXISTS request_hash text;
+  ADD COLUMN IF NOT EXISTS request_hash text,
+  ADD COLUMN IF NOT EXISTS payload_hash text;
 
 ALTER TABLE public.compra_linea
   ADD COLUMN IF NOT EXISTS variante_id integer,
