@@ -25,7 +25,7 @@ ALTER TABLE public.compra
   ADD COLUMN IF NOT EXISTS request_hash text;
 
 ALTER TABLE public.compra_linea
-  ADD COLUMN IF NOT EXISTS variante_id bigint,
+  ADD COLUMN IF NOT EXISTS variante_id integer,
   ADD COLUMN IF NOT EXISTS variante_nombre varchar(160),
   ADD COLUMN IF NOT EXISTS variante_codigo varchar(80),
   ADD COLUMN IF NOT EXISTS unidad_compra varchar(30) NOT NULL DEFAULT 'UNIDAD',
@@ -78,9 +78,9 @@ $variant_stock$;
 
 -- Mantener el tipo de variante compatible con producto_variante.id (bigint).
 ALTER TABLE public.devolucion_venta_linea
-  ADD COLUMN IF NOT EXISTS variante_id bigint;
+  ADD COLUMN IF NOT EXISTS variante_id integer;
 ALTER TABLE public.movimiento_inventario
-  ADD COLUMN IF NOT EXISTS variante_id bigint;
+  ADD COLUMN IF NOT EXISTS variante_id integer;
 
 DO $constraints$
 BEGIN
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS public.inventario_lote (
   empresa_id integer NOT NULL,
   sucursal_id integer NOT NULL,
   producto_id integer NOT NULL,
-  variante_id bigint,
+  variante_id integer,
   compra_id bigint,
   compra_linea_id bigint,
   codigo_lote varchar(80) NOT NULL,
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS public.comprobante_lote_salida (
   comprobante_linea_id integer,
   lote_id bigint NOT NULL REFERENCES public.inventario_lote(id) ON DELETE RESTRICT,
   producto_id integer NOT NULL REFERENCES public.producto(id) ON DELETE RESTRICT,
-  variante_id bigint REFERENCES public.producto_variante(id) ON DELETE RESTRICT,
+  variante_id integer REFERENCES public.producto_variante(id) ON DELETE RESTRICT,
   cantidad numeric(12,3) NOT NULL CHECK (cantidad > 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT fk_lote_salida_comprobante FOREIGN KEY (comprobante_id) REFERENCES public.comprobante(id) ON DELETE RESTRICT
