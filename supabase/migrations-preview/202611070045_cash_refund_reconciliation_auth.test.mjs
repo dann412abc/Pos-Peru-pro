@@ -9,7 +9,8 @@ const historySql=fs.readFileSync(path.join(here,'202611070044_cash_movements_his
 test('cash summary and history resolve users through the supabase_auth_user_id column',()=>{
  assert.match(sql,/supabase_auth_user_id=v_auth/);
  assert.match(historySql,/supabase_auth_user_id=v_auth/);
- assert.match(sql+historySql,/supabase_auth_user_id=v_auth/);\n assert.doesNotMatch(sql+historySql,/auth_user_id=v_auth/);
+ assert.match(sql+historySql,/supabase_auth_user_id=v_auth/);
+ assert.doesNotMatch(sql+historySql,/auth_user_id=v_auth/);
 });
 
 test('cash summary subtracts refunds by actual refund payment method',()=>{
