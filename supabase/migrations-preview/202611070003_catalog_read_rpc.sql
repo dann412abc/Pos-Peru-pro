@@ -28,7 +28,7 @@ BEGIN
 
   SELECT u.id, u.empresa_id INTO v_usuario_id, v_empresa_id
   FROM public.usuario u
-  WHERE u.auth_user_id = v_auth_id AND u.activo = TRUE;
+  WHERE u.supabase_auth_user_id = v_auth_id AND u.activo = TRUE;
   IF v_usuario_id IS NULL THEN
     RAISE EXCEPTION 'Identidad POS no vinculada o inactiva' USING ERRCODE = 'P0002';
   END IF;
