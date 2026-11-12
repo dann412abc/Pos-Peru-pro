@@ -13,6 +13,13 @@ test('FEFO preview is additive and guarded by singular-model prerequisites',()=>
   assert.match(sql,/ADD COLUMN IF NOT EXISTS producto_id integer/);
 });
 
+test('pre-existing historical lot tables receive missing variant columns and foreign keys',()=>{
+  assert.match(sql,/ALTER TABLE public\.inventario_lote[\\s\\S]*ADD COLUMN IF NOT EXISTS variante_id integer/);
+  assert.match(sql,/ALTER TABLE public\.comprobante_lote_salida[\\s\\S]*ADD COLUMN IF NOT EXISTS variante_id integer/);
+  assert.match(sql,/ADD CONSTRAINT fk_lote_variante[\\s\\S]*FOREIGN KEY \(variante_id\) REFERENCES public\.producto_variante\(id\)/);
+  assert.match(sql,/ADD CONSTRAINT fk_lote_salida_variante[\\s\\S]*FOREIGN KEY \(variante_id\) REFERENCES public\.producto_variante\(id\)/);
+});
+
 test('lot exits retain exact comprobante line identity for repeated products',()=>{
   assert.match(sql,/comprobante_linea_id integer/);
   assert.match(sql,/fk_lote_salida_comprobante_linea/);
