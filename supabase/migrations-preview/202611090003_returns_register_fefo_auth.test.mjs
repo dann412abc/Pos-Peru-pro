@@ -25,7 +25,7 @@ test('FEFO return traces original sale lots and prevents over-returning a lot',(
 });
 
 test('duplicate original sale lines are rejected before the transactional writer runs',()=>{
-  assert.match(sql,/Una línea de venta solo puede aparecer una vez por devolución/);
+  assert.match(sql,/Una línea original solo puede aparecer una vez por devolución/);
   assert.match(sql,/GROUP BY NULLIF\(entrada\.value->>'comprobanteLineaId',''\)[\s\S]*HAVING COUNT\(\*\)>1/);
   assert.ok(sql.indexOf("Una línea de venta no puede repetirse")<sql.indexOf("v_result:=public.pos_registrar_devolucion("));
 });
