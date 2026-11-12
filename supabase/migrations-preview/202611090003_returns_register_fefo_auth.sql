@@ -50,6 +50,19 @@ BEGIN
     RAISE EXCEPTION 'Datos de devolución inválidos' USING ERRCODE='22023';
   END IF;
 
+  -- Una línea original solo puede aparecer una vez por devolución.
+  -- Evita que dos entradas compartan el mismo registro devolucion_venta_linea
+  -- y que la reposición FEFO quede asociada de forma ambigua.
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(p_payload->'lineas') AS entrada(value)
+    GROUP BY NULLIF(entrada.value->>'comprobanteLineaId','')
+    HAVING COUNT(*)>1
+  ) THEN
+    RAISE EXCEPTION 'Una línea de venta no puede repetirse en la misma devolución'
+      USING ERRCODE='22023';
+  END IF;
+
   v_motivo:=left(btrim(COALESCE(p_payload->>'motivo','')),500);
   v_key:=btrim(COALESCE(p_payload->>'idempotencyKey',''));
   IF length(v_motivo)<5 OR v_key !~ '^[A-Za-z0-9._:-]{8,100}$' THEN
