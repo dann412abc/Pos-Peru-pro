@@ -93,3 +93,31 @@ La TypeORM `1700000000007` crea las dos primeras, pero no crea `cuenta_cobrar`. 
 ## 7. Límite de evidencia
 
 El conector permitió leer los cuatro archivos citados, pero no listar el directorio completo ni recuperar todos los nombres de migración. Por eso este documento registra hallazgos confirmados y deja explícita la enumeración incompleta; no afirma que las tablas ausentes del esquema inicial estén ausentes de todo el backend.
+
+
+## 8. Matriz de dependencias confirmadas y no confirmadas
+
+| Objeto | Creador confirmado | Dependencia / observación |
+|---|---|---|
+| `empresa` | `1700000000000-initial-schema.ts` | Base |
+| `sucursal` | `1700000000000-initial-schema.ts` | FK a empresa |
+| `usuario` | `1700000000000-initial-schema.ts` | FK a empresa |
+| `producto` | `1700000000000-initial-schema.ts` | FK a empresa/categoría |
+| `comprobante` | `1700000000000-initial-schema.ts` | FK a empresa/sucursal/caja/usuario/cliente |
+| `comprobante_linea` | `1700000000000-initial-schema.ts` | FK a comprobante/producto |
+| `proveedor` | No identificado todavía | Requerido por 1700000000007 |
+| `compra` | No identificado todavía | Requerido por 1700000000007 |
+| `compra_linea` | No identificado todavía | Requerido por 1700000000007 y 1710000000015 |
+| `producto_stock` | No identificado todavía | Requerido por 1700000000007 para migrar stock inicial a lotes |
+| `cuenta_cobrar` | No identificado todavía | Requerido por Supabase preview 202611090002 |
+| `producto_variante` | No identificado todavía | Requerido por 1710000000015 |
+| `inventario_lote` | `1700000000007-lotes-devoluciones-proveedor.ts` | Requiere compra, stock, producto y sucursal |
+| `comprobante_lote_salida` | `1700000000007-lotes-devoluciones-proveedor.ts` | Requiere comprobante e inventario_lote |
+| `devolucion_proveedor` | `1700000000007-lotes-devoluciones-proveedor.ts` | Requiere compra/proveedor/usuario/sucursal |
+| `devolucion_proveedor_linea` | `1700000000007-lotes-devoluciones-proveedor.ts` | Requiere devolución, compra_linea y lote |
+
+## 9. Resultado de la búsqueda de inventario en este bloque
+
+Se intentó localizar los creadores de `proveedor`, `compra`, `compra_linea`, `producto_stock`, `cuenta_cobrar` y `producto_variante` mediante búsqueda de código del repositorio. El índice de búsqueda disponible no devolvió coincidencias. Tampoco se pudo obtener un listado del directorio de migraciones mediante la acción de lectura de archivos, porque esta acepta archivos y rechaza directorios.
+
+Por ello, no se inventa el nombre de las migraciones intermedias ni se declara cerrada la cadena. El siguiente insumo necesario es el listado real de nombres del directorio `backend/src/database/migrations/` (o un ZIP/archivo del repositorio en esta rama) para leerlas en orden y completar la matriz.
