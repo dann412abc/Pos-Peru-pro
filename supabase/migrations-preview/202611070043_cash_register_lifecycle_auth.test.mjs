@@ -7,8 +7,7 @@ const closeFn = sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_caj
 const movementFn = sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_caja_movimiento_auth'), sql.indexOf('CREATE OR REPLACE FUNCTION public.pos_caja_cerrar_auth'));
 
 test('all cash lifecycle RPCs resolve the linked Supabase user through the actual supabase_auth_user_id column', () => {
-  assert.match(sql, /supabase_auth_user_id=v_auth/);
-  assert.match(sql, /supabase_auth_user_id=v_auth/);
+  assert.equal((sql.match(/supabase_auth_user_id=v_auth/g) || []).length, 3);
   assert.doesNotMatch(sql, /(^|[^a-z_])auth_user_id=v_auth/);
 });
 
