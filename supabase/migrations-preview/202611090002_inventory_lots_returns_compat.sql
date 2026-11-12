@@ -106,6 +106,14 @@ BEGIN
     ALTER TABLE public.movimiento_inventario ADD CONSTRAINT fk_movimiento_variante_lote
       FOREIGN KEY (variante_id) REFERENCES public.producto_variante(id) ON DELETE RESTRICT;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_lote_variante' AND conrelid='public.inventario_lote'::regclass) THEN
+    ALTER TABLE public.inventario_lote ADD CONSTRAINT fk_lote_variante
+      FOREIGN KEY (variante_id) REFERENCES public.producto_variante(id) ON DELETE RESTRICT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_lote_salida_variante' AND conrelid='public.comprobante_lote_salida'::regclass) THEN
+    ALTER TABLE public.comprobante_lote_salida ADD CONSTRAINT fk_lote_salida_variante
+      FOREIGN KEY (variante_id) REFERENCES public.producto_variante(id) ON DELETE RESTRICT;
+  END IF;
 END
 $constraints$;
 
