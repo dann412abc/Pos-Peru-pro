@@ -52,8 +52,6 @@ ALTER TABLE public.producto_stock
 ALTER TABLE public.cuenta_cobrar
   ADD COLUMN IF NOT EXISTS monto_revertido numeric(12,2) NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
-ALTER TABLE public.cliente
-  ADD COLUMN IF NOT EXISTS saldo_credito numeric(12,2) NOT NULL DEFAULT 0;
 
 -- El contrato actual de compras/ventas consulta producto_id directamente en el saldo de variante.
 UPDATE public.producto_variante_stock vs
