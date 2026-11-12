@@ -26,7 +26,7 @@ DECLARE
   v_devolucion_id bigint;
   v_linea_devolucion_id bigint;
   v_producto_id integer;
-  v_variante_id bigint;
+  v_variante_id integer;
   v_cantidad numeric(12,3);
   v_pendiente numeric(12,3);
   v_tomar numeric(12,3);
