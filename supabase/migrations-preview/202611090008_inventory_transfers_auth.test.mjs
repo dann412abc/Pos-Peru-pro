@@ -40,3 +40,9 @@ test('transfer RPC writes paired movements atomically and grants only authentica
   assert.match(sql, /REVOKE ALL ON FUNCTION public\.pos_inventario_transferir_auth\(jsonb\) FROM PUBLIC,anon/);
   assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.pos_inventario_transferir_auth\(jsonb\) TO authenticated/);
 });
+
+test('transfer variant IDs match the historical INTEGER schema type',()=>{
+  assert.match(sql,/v_variante integer;/);
+  assert.match(sql,/NULLIF\(v_line->>'varianteId',''\)::integer/);
+  assert.doesNotMatch(sql,/v_variante bigint|varianteId',''\)::bigint/);
+});
