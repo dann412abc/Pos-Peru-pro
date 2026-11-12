@@ -9,7 +9,7 @@ SET search_path=pg_catalog,public,auth
 AS $fn$
 DECLARE
   v_auth uuid := auth.uid(); v_empresa integer; v_usuario integer; v_sucursal integer; v_proveedor integer;
-  v_compra bigint; v_line jsonb; v_pago jsonb; v_idx integer := 0; v_producto integer; v_variante bigint;
+  v_compra bigint; v_existing_hash text; v_request_hash text; v_line jsonb; v_pago jsonb; v_idx integer := 0; v_producto integer; v_variante bigint;
   v_tipo_igv integer; v_cantidad numeric(12,3); v_costo numeric(12,4); v_base numeric(12,2); v_igv numeric(12,2); v_subtotal numeric(12,2);
   v_total numeric(12,2) := 0; v_gravadas numeric(12,2) := 0; v_exoneradas numeric(12,2) := 0; v_inafectas numeric(12,2) := 0; v_total_igv numeric(12,2) := 0;
   v_pagado numeric(12,2) := 0; v_stock numeric(12,3); v_costo_prom numeric(12,4); v_stock_nuevo numeric(12,3); v_costo_nuevo numeric(12,4);
@@ -31,13 +31,23 @@ BEGIN
   v_fecha := COALESCE(NULLIF(p_payload->>'fechaDocumento','')::date,CURRENT_DATE);
   IF v_sucursal IS NULL OR v_proveedor IS NULL OR v_condicion NOT IN ('CONTADO','CREDITO') OR v_tipo_doc NOT IN ('01','03','NV','OT')
      OR v_idem IS NULL OR v_idem !~ '^[A-Za-z0-9._:-]{12,100}$' THEN RAISE EXCEPTION 'Cabecera de compra inválida' USING ERRCODE='22023'; END IF;
+  v_request_hash := md5(p_payload::text);
+  PERFORM pg_advisory_xact_lock(hashtextextended('pos:compra:'||v_empresa||':'||v_idem,0));
   IF NOT EXISTS(SELECT 1 FROM public.usuario_sucursal us WHERE us.usuario_id=v_usuario AND us.sucursal_id=v_sucursal)
      OR NOT EXISTS(SELECT 1 FROM public.sucursal s WHERE s.id=v_sucursal AND s.empresa_id=v_empresa)
      OR NOT EXISTS(SELECT 1 FROM public.proveedor p WHERE p.id=v_proveedor AND p.empresa_id=v_empresa AND p.activo=true) THEN
     RAISE EXCEPTION 'Sucursal o proveedor no autorizado' USING ERRCODE='42501';
   END IF;
-  SELECT c.id INTO v_compra FROM public.compra c WHERE c.empresa_id=v_empresa AND c.idempotency_key=v_idem;
-  IF v_compra IS NOT NULL THEN RETURN jsonb_build_object('ok',true,'duplicada',true,'compraId',v_compra); END IF;
+  SELECT c.id,c.request_hash INTO v_compra,v_existing_hash
+  FROM public.compra c
+  WHERE c.empresa_id=v_empresa AND c.idempotency_key=v_idem;
+  IF v_compra IS NOT NULL THEN
+    IF v_existing_hash IS NOT NULL AND v_existing_hash IS DISTINCT FROM v_request_hash THEN
+      RAISE EXCEPTION 'La clave de compra ya fue utilizada con otros datos'
+        USING ERRCODE='23505';
+    END IF;
+    RETURN jsonb_build_object('ok',true,'duplicada',true,'compraId',v_compra);
+  END IF;
   -- Bloqueo de proveedor y sucursal para serializar la comprobación de duplicados/documento.
   PERFORM 1 FROM public.proveedor WHERE id=v_proveedor AND empresa_id=v_empresa FOR SHARE;
   IF v_numero<>'' AND EXISTS(SELECT 1 FROM public.compra WHERE empresa_id=v_empresa AND proveedor_id=v_proveedor AND tipo_documento=v_tipo_doc AND serie=v_serie AND numero=v_numero) THEN
@@ -68,8 +78,8 @@ BEGIN
   END LOOP;
   v_pagado:=round(v_pagado,2);
   IF v_pagado>v_total OR (v_condicion='CONTADO' AND abs(v_pagado-v_total)>0.01) THEN RAISE EXCEPTION 'Los pagos no coinciden con la condición de compra' USING ERRCODE='22023'; END IF;
-  INSERT INTO public.compra(empresa_id,sucursal_id,proveedor_id,usuario_id,tipo_documento,serie,numero,fecha_documento,condicion_pago,fecha_vencimiento,estado,op_gravadas,op_exoneradas,op_inafectas,total_igv,total,pagado,saldo_pendiente,idempotency_key)
-  VALUES(v_empresa,v_sucursal,v_proveedor,v_usuario,v_tipo_doc,left(v_serie,12),left(v_numero,30),v_fecha,v_condicion,NULLIF(p_payload->>'fechaVencimiento','')::date,'RECIBIDA',v_gravadas,v_exoneradas,v_inafectas,v_total_igv,v_total,v_pagado,v_total-v_pagado,v_idem)
+  INSERT INTO public.compra(empresa_id,sucursal_id,proveedor_id,usuario_id,tipo_documento,serie,numero,fecha_documento,condicion_pago,fecha_vencimiento,estado,op_gravadas,op_exoneradas,op_inafectas,total_igv,total,pagado,saldo_pendiente,idempotency_key,request_hash)
+  VALUES(v_empresa,v_sucursal,v_proveedor,v_usuario,v_tipo_doc,left(v_serie,12),left(v_numero,30),v_fecha,v_condicion,NULLIF(p_payload->>'fechaVencimiento','')::date,'RECIBIDA',v_gravadas,v_exoneradas,v_inafectas,v_total_igv,v_total,v_pagado,v_total-v_pagado,v_idem,v_request_hash)
   RETURNING id INTO v_compra;
   v_idx:=0;
   FOR v_line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') LOOP
