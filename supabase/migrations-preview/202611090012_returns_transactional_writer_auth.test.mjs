@@ -38,6 +38,11 @@ test('partial return calculation refunds only the net line amount after line dis
  assert.match(sql, /\(cl\.subtotal-cl\.descuento\)\*v_cantidad/);
 });
 
+test('variant refunds use the dedicated variant movement ledger',()=>{
+ assert.match(sql,/producto_variante_movimiento/);
+ assert.match(sql,/IF v_variante IS NULL THEN[\s\S]*INSERT INTO public\.movimiento_inventario[\s\S]*ELSE[\s\S]*INSERT INTO public\.producto_variante_movimiento/);
+});
+
 test('base return writer is internal-only so authenticated clients must use the FEFO wrapper',()=>{
  assert.match(sql,/REVOKE ALL ON FUNCTION public\.pos_registrar_devolucion\(integer,text,jsonb,jsonb,text\) FROM PUBLIC,anon,authenticated/);
  assert.doesNotMatch(sql,/GRANT EXECUTE ON FUNCTION public\.pos_registrar_devolucion/);
