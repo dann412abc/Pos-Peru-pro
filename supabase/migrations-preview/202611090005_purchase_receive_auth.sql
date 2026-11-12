@@ -19,7 +19,7 @@ DECLARE
  branch_id integer; supplier_id integer; doc_type text; doc_series text; doc_number text;
  doc_date date; due_date date; pay_condition text; idem_key text; payload_hash text;
  old_purchase record; line jsonb; payment jsonb; product_row record; variant_row record; variant_name text; variant_code text;
- product_id integer; variant_id bigint; line_key text; line_keys text[]:=ARRAY[]::text[];
+ product_id integer; variant_id integer; line_key text; line_keys text[]:=ARRAY[]::text[];
  packs numeric; units_per_pack numeric; pack_cost numeric; qty numeric(12,3); unit_cost numeric(12,4);
  amount numeric(14,2); base_amount numeric(14,2); tax_amount numeric(14,2); line_total numeric(14,2);
  total_amount numeric(14,2):=0; taxable numeric(14,2):=0; exempt numeric(14,2):=0;
@@ -80,7 +80,7 @@ BEGIN
   SELECT item.value,item.ordinality
   FROM jsonb_array_elements(p_payload->'lineas') WITH ORDINALITY AS item(value,ordinality)
  LOOP
-  product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::bigint;
+  product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::integer;
   line_key:=product_id::text||':'||COALESCE(variant_id::text,'base')||':'||
    CASE WHEN NULLIF(btrim(line->>'codigoLote'),'') IS NULL
     THEN 'AUTO:'||line_ordinal::text
