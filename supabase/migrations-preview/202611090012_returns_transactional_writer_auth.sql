@@ -42,7 +42,6 @@ BEGIN
     ('movimiento_inventario','stock_anterior'),('movimiento_inventario','stock_posterior'),('movimiento_inventario','motivo'),
     ('cuenta_cobrar','id'),('cuenta_cobrar','comprobante_id'),('cuenta_cobrar','empresa_id'),
     ('cuenta_cobrar','sucursal_id'),('cuenta_cobrar','saldo_pendiente'),('cuenta_cobrar','monto_revertido'),('cuenta_cobrar','estado'),('cuenta_cobrar','updated_at'),
-    ('cliente','id'),('cliente','empresa_id'),('cliente','saldo_credito'),
     ('devolucion_venta','id'),('devolucion_venta','empresa_id'),('devolucion_venta','usuario_id'),
     ('devolucion_venta','caja_id'),('devolucion_venta','request_hash'),('devolucion_venta','idempotency_key'),
     ('devolucion_venta_linea','devolucion_id'),('devolucion_venta_linea','comprobante_linea_id'),
@@ -335,8 +334,6 @@ BEGIN
         estado=CASE WHEN saldo_pendiente-v_credito<=0 THEN 'AJUSTADA' ELSE 'PARCIAL' END,
         updated_at=now()
     WHERE id=v_cuenta.id AND empresa_id=v_empresa;
-    UPDATE public.cliente SET saldo_credito=greatest(0,saldo_credito-v_credito)
-    WHERE id=v_venta.cliente_id AND empresa_id=v_empresa;
     IF v_cuenta.saldo_pendiente-v_credito<=0 THEN
       UPDATE public.comprobante SET estado='PAGADA'
       WHERE id=p_comprobante_id AND empresa_id=v_empresa AND estado='PENDIENTE';
