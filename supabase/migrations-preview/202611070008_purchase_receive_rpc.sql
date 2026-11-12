@@ -9,7 +9,7 @@ SET search_path=pg_catalog,public,auth
 AS $fn$
 DECLARE
   v_auth uuid := auth.uid(); v_empresa integer; v_usuario integer; v_sucursal integer; v_proveedor integer;
-  v_compra bigint; v_line jsonb; v_pago jsonb; v_idx integer := 0; v_producto integer; v_variante integer;
+  v_compra bigint; v_line jsonb; v_pago jsonb; v_idx integer := 0; v_producto integer; v_variante bigint;
   v_tipo_igv integer; v_cantidad numeric(12,3); v_costo numeric(12,4); v_base numeric(12,2); v_igv numeric(12,2); v_subtotal numeric(12,2);
   v_total numeric(12,2) := 0; v_gravadas numeric(12,2) := 0; v_exoneradas numeric(12,2) := 0; v_inafectas numeric(12,2) := 0; v_total_igv numeric(12,2) := 0;
   v_pagado numeric(12,2) := 0; v_stock numeric(12,3); v_costo_prom numeric(12,4); v_stock_nuevo numeric(12,3); v_costo_nuevo numeric(12,4);
