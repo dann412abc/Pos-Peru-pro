@@ -73,10 +73,19 @@ BEGIN
   RETURN jsonb_build_object('ok',true,'compraId',old_purchase.id,'repetida',true);
  END IF;
 
- -- Validate unique product/presentation combinations before any stock mutation.
- FOR line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') LOOP
+ -- Permite repetir producto/presentación si cada línea representa un lote distinto.
+ -- Un código explícito repetido para la misma variante se rechaza; los códigos vacíos
+ -- reciben identidad por línea y luego se generan como COMPRA-<compra>-<línea>.
+ FOR line,line_ordinal IN
+  SELECT item.value,item.ordinality
+  FROM jsonb_array_elements(p_payload->'lineas') WITH ORDINALITY AS item(value,ordinality)
+ LOOP
   product_id:=(line->>'productoId')::integer; variant_id:=NULLIF(line->>'varianteId','')::bigint;
-  line_key:=product_id::text||':'||COALESCE(variant_id::text,'base');
+  line_key:=product_id::text||':'||COALESCE(variant_id::text,'base')||':'||
+   CASE WHEN NULLIF(btrim(line->>'codigoLote'),'') IS NULL
+    THEN 'AUTO:'||line_ordinal::text
+    ELSE 'LOT:'||upper(btrim(line->>'codigoLote'))
+   END;
   IF line_key=ANY(line_keys) THEN RAISE EXCEPTION 'PURCHASE_DUPLICATE_LINE' USING ERRCODE='22023'; END IF;
   line_keys:=array_append(line_keys,line_key);
  END LOOP;

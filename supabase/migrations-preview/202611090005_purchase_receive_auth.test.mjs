@@ -88,3 +88,12 @@ test('purchase stock receipt preserves variant identity and creates lot trace fo
   assert.match(sql, /UPDATE public\.producto_variante_stock SET stock=stock_after,costo_promedio=avg_after/);
   assert.match(sql, /VALUES\(company_id,branch_id,product_id,variant_id,purchase_id,purchase_line_id,batch_code,expiry_date,qty,qty,unit_cost\)/);
 });
+
+test('allows repeated product/variant lines when each line has a distinct lot identity', () => {
+  assert.match(sql, /FOR line,line_ordinal IN[\\s\\S]*?WITH ORDINALITY AS item\\(value,ordinality\\)/);
+  assert.match(sql, /line_key:=product_id::text\\|\\|':'\\|\\|COALESCE\\(variant_id::text,'base'\\)\\|\\|':'\\|\\|/);
+  assert.match(sql, /THEN 'AUTO:'\\|\\|line_ordinal::text/);
+  assert.match(sql, /ELSE 'LOT:'\\|\\|upper\\(btrim\\(line->>'codigoLote'\\)\\)/);
+  assert.match(sql, /PURCHASE_DUPLICATE_LINE/);
+  assert.doesNotMatch(sql, /line_key:=product_id::text\\|\\|':'\\|\\|COALESCE\\(variant_id::text,'base'\\);/);
+});
