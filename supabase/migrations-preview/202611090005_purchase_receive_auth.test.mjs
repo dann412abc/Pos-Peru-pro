@@ -77,9 +77,13 @@ test('direct payload rejects missing payment condition and non-array lines', () 
 });
 
 
-test('cash available for supplier receipt deducts registered cash refunds', () => {
-  assert.match(sql, /FROM public\.devolucion_venta_pago dp[\s\S]*?JOIN public\.devolucion_venta d ON d\.id=dp\.devolucion_id AND d\.empresa_id=dp\.empresa_id[\s\S]*?WHERE d\.caja_id=cash_row\.id AND d\.empresa_id=company_id[\s\S]*?d\.estado='REGISTRADA' AND dp\.metodo_pago='EFECTIVO'/);
-  assert.match(sql, /SELECT cash_available-COALESCE\(sum\(dp\.monto\),0\)/);
+test('cash availability does not double-deduct refunds already posted to the cash ledger', () => {
+  assert.ok(sql.includes('FROM public.devolucion_venta_pago dp'));
+  assert.ok(sql.includes("d.estado='REGISTRADA' AND dp.metodo_pago='EFECTIVO'"));
+  assert.ok(sql.includes('SELECT cash_available-COALESCE(sum(dp.monto),0)'));
+  assert.ok(sql.includes('AND NOT EXISTS ('));
+  assert.ok(sql.includes('cm.devolucion_venta_id=d.id'));
+  assert.ok(sql.includes("cm.motivo ILIKE 'Reembolso por devolución%'"));
   assert.ok(sql.indexOf('SELECT cash_available-COALESCE(sum(dp.monto),0)') < sql.indexOf('IF cash_out>cash_available'));
 });
 
