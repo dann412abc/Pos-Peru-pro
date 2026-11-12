@@ -61,3 +61,10 @@ test('purchase header credit due date exists separately from lot expiration',()=
   assert.match(sql,/ALTER TABLE public\.compra\s+ADD COLUMN IF NOT EXISTS fecha_vencimiento date/);
   assert.match(sql,/fecha_vencimiento date/);
 });
+
+test('purchase schema supports payload fingerprints and repeated product variants across distinct lots',()=>{
+  assert.match(sql,/ADD COLUMN IF NOT EXISTS request_hash text/);
+  assert.match(sql,/DROP INDEX IF EXISTS public\.uq_compra_linea_producto_variante/);
+  assert.match(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_numero/);
+  assert.doesNotMatch(sql,/CREATE UNIQUE INDEX IF NOT EXISTS uq_compra_linea_producto_variante/);
+});
