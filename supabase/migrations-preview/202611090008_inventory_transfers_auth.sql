@@ -75,7 +75,7 @@ DECLARE
   v_transferencia_id bigint;
   v_line jsonb;
   v_producto integer;
-  v_variante bigint;
+  v_variante integer;
   v_cantidad numeric(12,3);
   v_stock_origen numeric(12,3);
   v_stock_destino numeric(12,3);
@@ -131,7 +131,7 @@ BEGIN
 
   IF EXISTS (
     SELECT 1 FROM jsonb_array_elements(p_payload->'lineas') x
-    GROUP BY (x->>'productoId')::integer, NULLIF(x->>'varianteId','')::bigint HAVING COUNT(*)>1
+    GROUP BY (x->>'productoId')::integer, NULLIF(x->>'varianteId','')::integer HAVING COUNT(*)>1
   ) THEN RAISE EXCEPTION 'INVENTORY_TRANSFER_DUPLICATE_LINE'; END IF;
 
   v_hash := md5(jsonb_build_object('sucursalOrigenId',v_origen,'sucursalDestinoId',v_destino,
@@ -156,10 +156,10 @@ BEGIN
   VALUES(v_empresa_id,v_origen,v_destino,v_usuario_id,v_motivo,v_key)
   RETURNING id INTO v_transferencia_id;
 
-  FOR v_line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') ORDER BY (value->>'productoId')::integer, NULLIF(value->>'varianteId','')::bigint NULLS FIRST
+  FOR v_line IN SELECT value FROM jsonb_array_elements(p_payload->'lineas') ORDER BY (value->>'productoId')::integer, NULLIF(value->>'varianteId','')::integer NULLS FIRST
   LOOP
     v_producto := (v_line->>'productoId')::integer;
-    v_variante := NULLIF(v_line->>'varianteId','')::bigint;
+    v_variante := NULLIF(v_line->>'varianteId','')::integer;
     v_cantidad := (v_line->>'cantidad')::numeric;
 
     IF NOT EXISTS (SELECT 1 FROM public.producto p WHERE p.id=v_producto AND p.empresa_id=v_empresa_id AND p.activo=true) THEN
