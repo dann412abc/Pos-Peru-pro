@@ -10,7 +10,7 @@ test('cash summary and history resolve users through the supabase_auth_user_id c
  assert.match(sql,/supabase_auth_user_id=v_auth/);
  assert.match(historySql,/supabase_auth_user_id=v_auth/);
  assert.match(sql+historySql,/supabase_auth_user_id=v_auth/);
- assert.doesNotMatch(sql+historySql,/auth_user_id=v_auth/);
+ assert.doesNotMatch(sql+historySql,/(^|[^a-z_])auth_user_id=v_auth/);
 });
 
 test('cash summary subtracts refunds by actual refund payment method',()=>{
